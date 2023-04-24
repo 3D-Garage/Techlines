@@ -19,6 +19,42 @@ import { Link as ReactLink } from "react-router-dom";
 import { StarIcon } from "@chakra-ui/icons";
 import { useState } from "react";
 
+const Rating = ({ rating, numReviews }) => {
+  const { iconSize, setIconsize } = useState("14px");
+  return (
+    <Flex>
+      <HStack spacing={2}>
+        <StarIcon size={iconSize} w={"14px"} color={"yellow.500"} />
+        <StarIcon
+          size={iconSize}
+          w={"14px"}
+          color={rating >= 2 ? "yellow.500" : "gray.200"}
+        />
+        <StarIcon
+          size={iconSize}
+          w={"14px"}
+          color={rating >= 3 ? "yellow.500" : "gray.200"}
+        />
+        <StarIcon
+          size={iconSize}
+          w={"14px"}
+          color={rating >= 4 ? "yellow.500" : "gray.200"}
+        />
+        <StarIcon
+          size={iconSize}
+          w={"14px"}
+          color={rating >= 5 ? "yellow.500" : "gray.200"}
+        />
+      </HStack>
+      <Text fontSize={"md"} fontWeight={"bold"} ml={"4px"}>
+        {`${numReviews} ${
+          (numReviews === 1) | (numReviews === 0) ? "Review" : "Reviews"
+        }`}
+      </Text>
+    </Flex>
+  );
+};
+
 const ProductCard = ({ product }) => {
   return (
     <Stack
@@ -73,6 +109,9 @@ const ProductCard = ({ product }) => {
             {product.name}
           </Box>
         </Link>
+      </Flex>
+      <Flex justifyContent={"space-between"} alignContent="center" py={2}>
+        <Rating rating={product.rating} numReviews={product.numReviews} />
       </Flex>
       <Flex justify={"space-between"}>
         <Box fontSize={"2xl"}>
