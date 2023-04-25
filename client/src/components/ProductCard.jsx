@@ -19,7 +19,7 @@ import { Link as ReactLink } from "react-router-dom";
 import { StarIcon } from "@chakra-ui/icons";
 import { useState } from "react";
 
-const Rating = ({ rating, numReviews }) => {
+const Rating = ({ rating, numberOfReviews }) => {
   const { iconSize, setIconsize } = useState("14px");
   return (
     <Flex>
@@ -47,8 +47,10 @@ const Rating = ({ rating, numReviews }) => {
         />
       </HStack>
       <Text fontSize={"md"} fontWeight={"bold"} ml={"4px"}>
-        {`${numReviews} ${
-          (numReviews === 1) | (numReviews === 0) ? "Review" : "Reviews"
+        {`${numberOfReviews} ${
+          (numberOfReviews === 1) | (numberOfReviews === 0)
+            ? "Review"
+            : "Reviews"
         }`}
       </Text>
     </Flex>
@@ -66,7 +68,7 @@ const ProductCard = ({ product }) => {
       rounded="lg"
       position="relative"
     >
-      {product.isNew && (
+      {product.productIsNew && (
         <Circle
           size={"10px"}
           position="absolute"
@@ -92,7 +94,7 @@ const ProductCard = ({ product }) => {
             Sold Out
           </Badge>
         )}
-        {product.isNew && (
+        {product.productIsNew && (
           <Badge rounded={"full"} px={2} fontSize={"0.8em"} colorScheme="green">
             New
           </Badge>
@@ -111,14 +113,17 @@ const ProductCard = ({ product }) => {
         </Link>
       </Flex>
       <Flex justifyContent={"space-between"} alignContent="center" py={2}>
-        <Rating rating={product.rating} numReviews={product.numReviews} />
+        <Rating
+          rating={product.rating}
+          numberOfReviews={product.numberOfReviews}
+        />
       </Flex>
       <Flex justify={"space-between"}>
         <Box fontSize={"2xl"}>
+          {product.price.toFixed(2) + " "}
           <Box as="span" color={"gray.600"} fontSize={"lg"}>
             Ft
           </Box>
-          {product.price.toFixed(2)}
         </Box>
         <Tooltip
           label="Add to cart"
