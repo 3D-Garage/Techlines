@@ -37,7 +37,7 @@ const ProductsScreen = () => {
           />
         </Stack>
       ) : error ? (
-        <Alert status="errot">
+        <Alert status="error">
           <AlertIcon />
           <AlertTitle>Upps! Something went wrong!</AlertTitle>
           <AlertDescription>{error}</AlertDescription>

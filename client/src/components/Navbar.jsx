@@ -52,8 +52,11 @@ const Navbar = () => {
         <HStack>
           <Link as={ReactLink} to="/">
             <Flex alignItems="center">
-              <Icon as={BsScissors} h={6} w={6} color={"purple.400"}></Icon>
-              <Text fontWeight={"extrabold"}>Józsa Adri Hair</Text>
+              <img
+                src={require("../logo/3d-printer24_24.png")}
+                alt="3d-printer-img"
+              ></img>
+              <Text fontWeight={"extrabold"}>3D Garage</Text>
             </Flex>
           </Link>
           <HStack as={"nav"} spacing={4} display={{ base: "none", md: "flex" }}>
