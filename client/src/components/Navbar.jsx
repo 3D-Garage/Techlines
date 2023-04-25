@@ -50,13 +50,17 @@ const Navbar = () => {
           onClick={isOpen ? onClose : onOpen}
         ></IconButton>
         <HStack>
-          <Link as={ReactLink} to="/">
+          <Link style={{ textDecoration: "none" }} as={ReactLink} to="/">
             <Flex alignItems="center">
               <img
+                width={"24px"}
+                height={"24px"}
                 src={require("../logo/3d-printer24_24.png")}
                 alt="3d-printer-img"
               ></img>
-              <Text fontWeight={"extrabold"}>3D Garage</Text>
+              <Text paddingLeft={"1"} fontWeight={"extrabold"}>
+                3D Garage
+              </Text>
             </Flex>
           </Link>
           <HStack as={"nav"} spacing={4} display={{ base: "none", md: "flex" }}>
