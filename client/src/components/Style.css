@@ -1,0 +1,14 @@
+.StackCss {
+  position: relative;
+  height: "fit-content";
+}
+
+.StackCss::after {
+  content: "";
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 1px;
+  bottom: 0;
+  background-color: black;
+}
