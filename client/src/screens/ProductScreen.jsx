@@ -24,6 +24,7 @@ import {
 } from "@chakra-ui/react";
 import { MinusIcon, StarIcon, SmallAddIcon, AddIcon } from "@chakra-ui/icons";
 import { BiPackage, BiCheckShield, BiSupport } from "react-icons/bi";
+import { CgSmileNone } from "react-icons/cg";
 import { useDispatch, useSelector } from "react-redux";
 import { getProduct } from "../redux/actions/productAction";
 import { addCartItem } from "../redux/actions/cartAction";
@@ -72,17 +73,20 @@ const ProductScreen = () => {
           <AlertTitle>Oops! Something went wrong!</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      ) : cart.length <= 0 ? (
-        <Alert status="warning">
-          <AlertIcon />
-          <AlertTitle>Your cart is empty.</AlertTitle>
-          <AlertDescription>
-            <Link as={ReactLink} to="/products">
-              Click here to see our products.
-            </Link>
-          </AlertDescription>
-        </Alert>
       ) : (
+        // This ternary operator checks if the cart is not empty. If it's not empty, it displays the items in the cart.
+        // Otherwise, if the cart length is 0 (empty), it shows a warning message using the Alert component from Chakra UI framework
+        //cart.length <= 0 ? (
+        //   <Alert status="warning">
+        //     <AlertIcon />
+        //     <AlertTitle>Your cart is empty.</AlertTitle>
+        //     <AlertDescription>
+        //       <Link as={ReactLink} to="/products">
+        //         Click here to see our products.
+        //       </Link>
+        //     </AlertDescription>
+        //   </Alert>
+        // ) :
         product && (
           <Box
             maxW={{ base: "3xl", lg: "5xl" }}
@@ -152,11 +156,76 @@ const ProductScreen = () => {
                       />
                     </ButtonGroup>
                   </Flex>
-                  <Button colorScheme="purple" onClick={() => addItem()}>
+                  <Button isDisabled={product.stock === 0} colorScheme="purple" onClick={() => addItem()}>
                     Add to cart
                   </Button>
+                  <Stack width={"270px"}>
+                    <Flex alignItems={"center"}>
+                      <BiPackage size={"20px"} />
+                      <Text fontWeight={"medium"} fontSize={"sm"} ml={"2"}>
+                        Free shipping if order above 10,000 Ft
+                      </Text>
+                    </Flex>
+                    <Flex alignItems={"center"}>
+                      <BiCheckShield size={"20px"} />
+                      <Text fontWeight={"medium"} fontSize={"sm"} ml={"2"}>
+                        2 year extended warrantly
+                      </Text>
+                    </Flex>
+                    <Flex alignItems={"center"}>
+                      <BiSupport size={"20px"} />
+                      <Text fontWeight={"medium"} fontSize={"sm"} ml={"2"}>
+                        We're here for you 24/7.
+                      </Text>
+                    </Flex>
+                  </Stack>
                 </Stack>
               </Stack>
+              <Flex direction={"column"} align={"center"} flex={1} _dark={{ bg: "gray.900" }} pb={"30px"}>
+                <Image
+                  src={product.image}
+                  alt={product.name}
+                  border={"2px"}
+                  borderColor={"purple.400"}
+                  borderRadius={"10px"}
+                  borderd
+                />
+              </Flex>
+            </Stack>
+            <Stack>
+              <Text fontSize={"xl"} fontWeight={"bold"}>
+                Reviews
+              </Text>
+              {product.reviews.length ? (
+                <SimpleGrid minChildWidth="300px" spacingX="40px" spacingY="20px">
+                  {product.reviews.map((review) => (
+                    <Box key={review._id}>
+                      <Flex spacing="2px" alignItems={"center"}>
+                        <StarIcon color={"purple.500"} />
+                        <StarIcon color={review >= 2 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={review >= 3 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={review >= 4 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={review >= 5 ? "purple.500" : "gray.300"} />
+                        <Text fontWeight={"semibold"} ml={"4px"}>
+                          {review.tilte && review.tilte}
+                        </Text>
+                      </Flex>
+                      <Box py="12px">{review.comment}</Box>
+                      <Text fontSize={"sm"} color={"gray.400"}>
+                        {" "}
+                        by {review.name}, {new Date(review.createdAt).toDateString()}
+                      </Text>
+                    </Box>
+                  ))}
+                </SimpleGrid>
+              ) : (
+                <Flex alignItems={"center"}>
+                  <Text fontWeight={"semibold"} ml={"4px"} mr={"4px"}>
+                    Sorry. There are no reviews on this product yet.{" "}
+                  </Text>
+                  <CgSmileNone />
+                </Flex>
+              )}
             </Stack>
           </Box>
         )

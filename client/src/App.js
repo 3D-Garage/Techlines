@@ -12,14 +12,8 @@ function App() {
         <Navbar />
         <main>
           <Routes>
-            <Route
-              path="/products"
-              element={<ProductsScreen></ProductsScreen>}
-            ></Route>
-            <Route
-              path="/product/:id"
-              element={<ProductScreen></ProductScreen>}
-            ></Route>
+            <Route path="/products" element={<ProductsScreen></ProductsScreen>}></Route>
+            <Route path="/product/:id" element={<ProductScreen></ProductScreen>}></Route>
             <Route path="/cart" element={<CartScreen></CartScreen>}></Route>
           </Routes>
         </main>
