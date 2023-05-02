@@ -14,7 +14,7 @@ import {
 } from "@chakra-ui/react";
 import { Link as ReactLink } from "react-router-dom";
 import { HamburgerIcon, CloseIcon, MoonIcon, SunIcon } from "@chakra-ui/icons";
-import { BsScissors } from "react-icons/bs";
+import { useState } from "react";
 
 const links = [
   { linkName: "Products", path: "/products" },
@@ -40,6 +40,7 @@ const NavLink = ({ path, children }) => (
 const Navbar = () => {
   const { isOpen, onClose, onOpen } = useDisclosure();
   const { colorMode, toggleColorMode } = useColorMode();
+  const [isHovering, setIsHovering] = useState(false);
   return (
     <Box bg={useColorModeValue("gray.100", "gray.900")} px={4}>
       <Flex h={16} alignItems={"center"} justifyContent={"space-between"}>
@@ -50,13 +51,19 @@ const Navbar = () => {
           onClick={isOpen ? onClose : onOpen}
         ></IconButton>
         <HStack>
-          <Link style={{ textDecoration: "none" }} as={ReactLink} to="/">
+          <Link
+            style={{ textDecoration: "none" }}
+            as={ReactLink}
+            to="/"
+            onMouseEnter={() => setIsHovering(true)}
+            onMouseLeave={() => setIsHovering(false)}
+          >
             <Flex alignItems="center">
               <img
                 width={"24px"}
                 height={"24px"}
-                src={require("../logo/3d-printer24_24.png")}
-                alt="3d-printer-img"
+                src={require(`../logo/3d-printer${isHovering ? "" : "24_24"}.png`)}
+                alt={isHovering ? "3d-printer-img" : "3d-printer-img-purple"}
               ></img>
               <Text paddingLeft={"1"} fontWeight={"extrabold"}>
                 3D Garage
@@ -79,14 +86,7 @@ const Navbar = () => {
               onClick={() => toggleColorMode()}
             />
           </NavLink>
-          <Button
-            as={ReactLink}
-            to={"/login"}
-            p={2}
-            fontSize={"sm"}
-            fontWeight={400}
-            variant={"link"}
-          >
+          <Button as={ReactLink} to={"/login"} p={2} fontSize={"sm"} fontWeight={400} variant={"link"}>
             Sign In
           </Button>
           <Button
