@@ -65,7 +65,7 @@ const ProductScreen = () => {
     <Wrap spacing="30px" justify="center" minHeight="100vh">
       {loading ? (
         <Stack direction="row" spacing={4}>
-          <Spinner mt={20} thickness="2px" speed="0.65s" emptyColor="gray.200" color="orange.500" size="xl" />
+          <Spinner mt={20} thickness="2px" speed="0.65s" emptyColor="gray.200" color="puple.500" size="xl" />
         </Stack>
       ) : error ? (
         <Alert status="error">

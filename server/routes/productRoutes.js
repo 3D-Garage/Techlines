@@ -1,7 +1,7 @@
 import express from "express";
 import Product from "../models/Product.js";
 
-const productRotes = express.Router();
+const productRoutes = express.Router();
 
 const getProducts = async (req, res) => {
   const products = await Product.find({ available: true });
@@ -19,7 +19,7 @@ const getProduct = async (req, res) => {
   }
 };
 
-productRotes.route("/").get(getProducts);
-productRotes.route("/:id").get(getProduct);
+productRoutes.route("/").get(getProducts);
+productRoutes.route("/:id").get(getProduct);
 
-export default productRotes;
+export default productRoutes;

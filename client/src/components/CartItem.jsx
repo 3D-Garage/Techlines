@@ -16,11 +16,7 @@ const CartItem = ({ cartItem }) => {
   const dispatch = useDispatch();
 
   return (
-    <Flex
-      direction={{ base: "column", md: "row" }}
-      justify="space-between"
-      align="center"
-    >
+    <Flex direction={{ base: "column", md: "row" }} justify="space-between" align="center">
       <Stack direction="row" spacing="5" width="full">
         <Image
           rounded="lg"
@@ -47,7 +43,7 @@ const CartItem = ({ cartItem }) => {
       >
         <Select
           maxW="64px"
-          focusBorderColor={mode("orange.500", "orange.200")}
+          focusBorderColor={mode("purple.500", "purple.200")}
           value={qty}
           cursor={"pointer"}
           onChange={(e) => {

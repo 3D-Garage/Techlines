@@ -3,7 +3,7 @@ import { createSlice } from "@reduxjs/toolkit";
 const calcSubtotal = (cartState) => {
   let result = 0;
   cartState.map((item) => (result += item.qty * item.price));
-  return Number(result).toFixed(2);
+  return Number(result);
 };
 
 export const initialState = {
@@ -31,9 +31,7 @@ export const cartSlice = createSlice({
     cartItemAdd: (state, { payload }) => {
       const existingItem = state.cart.find((item) => item.id === payload.id);
       if (existingItem) {
-        state.cart = state.cart.map((item) =>
-          item.id === existingItem.id ? payload : item
-        );
+        state.cart = state.cart.map((item) => (item.id === existingItem.id ? payload : item));
       } else {
         state.cart = [...state.cart, payload];
       }
@@ -56,8 +54,7 @@ export const cartSlice = createSlice({
   },
 });
 
-export const { setLoading, setError, cartItemAdd, cartItemRemoval } =
-  cartSlice.actions;
+export const { setLoading, setError, cartItemAdd, cartItemRemoval } = cartSlice.actions;
 export default cartSlice.reducer;
 
 export const cartSelector = (state) => state.cart;

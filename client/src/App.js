@@ -6,6 +6,7 @@ import CartScreen from "./screens/CartScreen";
 import ProductScreen from "./screens/ProductScreen";
 import Footer from "./components/Footer";
 import Home from "./screens/LandingScreen";
+import LoginScreen from "./screens/LoginScreen";
 
 function App() {
   return (
@@ -14,10 +15,11 @@ function App() {
         <Navbar />
         <main>
           <Routes>
-            <Route path="/" element={<Home></Home>}></Route>
-            <Route path="/product/:id" element={<ProductScreen></ProductScreen>}></Route>
-            <Route path="/products" element={<ProductsScreen></ProductsScreen>}></Route>
-            <Route path="/cart" element={<CartScreen></CartScreen>}></Route>
+            <Route path="/" element={<Home />}></Route>
+            <Route path="/product/:id" element={<ProductScreen />}></Route>
+            <Route path="/products" element={<ProductsScreen />}></Route>
+            <Route path="/cart" element={<CartScreen />}></Route>
+            <Route path="/login" element={<LoginScreen />}></Route>
           </Routes>
         </main>
         <Footer />

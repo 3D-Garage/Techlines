@@ -1,12 +1,4 @@
-import {
-  Button,
-  Flex,
-  Heading,
-  Stack,
-  Text,
-  useColorModeValue as mode,
-  Badge,
-} from "@chakra-ui/react";
+import { Button, Flex, Heading, Stack, Text, useColorModeValue as mode, Badge } from "@chakra-ui/react";
 import { useState } from "react";
 import { FaArrowRight } from "react-icons/fa";
 import { useSelector } from "react-redux";
@@ -14,7 +6,7 @@ import { Link as ReactLink, useNavigate } from "react-router-dom";
 
 const CartOrderSummary = () => {
   const [buttonLoading, setButtonLoading] = useState();
-  const standardShipping = Number(4.99).toFixed(2);
+  const standardShipping = Number(500);
   const cartItems = useSelector((state) => state.cart);
   const { subtotal } = cartItems;
   const navigate = useNavigate();
@@ -25,13 +17,7 @@ const CartOrderSummary = () => {
   };
 
   return (
-    <Stack
-      spacing={8}
-      borderWidth={"1px"}
-      rounded={"lg"}
-      padding={8}
-      w={"full"}
-    >
+    <Stack spacing={8} borderWidth={"1px"} rounded={"lg"} padding={8} w={"full"}>
       <Heading size={"md"} y>
         Order Summary
       </Heading>
@@ -47,7 +33,7 @@ const CartOrderSummary = () => {
             Shipping
           </Text>
           <Text fontWeight={"medium"}>
-            {subtotal <= 1000 ? (
+            {subtotal <= 10000 ? (
               `${standardShipping} Ft`
             ) : (
               <Badge rounded="full" px="2" fontSize="0.8em" colorScheme="green">
@@ -61,9 +47,7 @@ const CartOrderSummary = () => {
             Total
           </Text>
           <Text fontSize="l" fontWeight="extrabold">
-            {subtotal <= 1000
-              ? Number(subtotal) + Number(standardShipping)
-              : subtotal}
+            {subtotal <= 1000 ? Number(subtotal) + Number(standardShipping) : subtotal}
             {" Ft"}
           </Text>
         </Flex>

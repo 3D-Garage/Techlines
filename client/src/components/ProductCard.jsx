@@ -94,7 +94,7 @@ const ProductCard = ({ product }) => {
       </Flex>
       <Flex justify={"space-between"}>
         <Box fontSize={"md"} alignSelf={"center"}>
-          {product.price.toFixed(2) + " "}
+          {product.price + " "}
           <Box as="span" color={"gray.600"} fontSize={"md"}>
             Ft
           </Box>
