@@ -1,71 +1,67 @@
 import {
   Box,
   Button,
-  Checkbox,
   Container,
   FormControl,
   Heading,
-  Stack,
   HStack,
+  Stack,
   Text,
   useBreakpointValue,
-  useColorModeValue,
-  Alert,
+  useColorModeValue as mode,
   AlertIcon,
+  Alert,
   AlertDescription,
   AlertTitle,
   useToast,
 } from "@chakra-ui/react";
+import TextField from "../components/TextField";
+import PasswordTextField from "../components/PasswordTextField";
 import { useState, useEffect } from "react";
 import { Formik } from "formik";
 import * as Yup from "yup";
-import { useSelector, useDispatch } from "react-redux";
-import { useNavigate, Link as ReactLink, useLocation } from "react-router-dom";
-import PasswordTextField from "../components/PasswordTextField";
-import TextField from "../components/TextField";
-import { login } from "../redux/actions/userActions";
-import { FaUser } from "react-icons/fa";
+import { useDispatch, useSelector } from "react-redux";
+import { useNavigate, Link as ReactLink } from "react-router-dom";
+import { register } from "../redux/actions/userActions";
+import { FaUserPlus } from "react-icons/fa";
 
-//TODO: redefine password length
-const LoginScreen = () => {
+const RegistraionScreen = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const dispatch = useDispatch();
-  const redirect = "/products";
-  const toast = useToast();
-
   const user = useSelector((state) => state.user);
   const { loading, error, userInfo } = user;
-
+  const redirect = "/products";
+  const toast = useToast();
   const headingBR = useBreakpointValue({ base: "xs", md: "sm" });
   const boxBR = useBreakpointValue({ base: "transparent", md: "bg-surface" });
 
   useEffect(() => {
     if (userInfo) {
-      if (location.state?.from) {
-        navigate(location.state.from);
-      } else {
-        navigate(redirect);
-      }
+      navigate(redirect);
       toast({
-        description: "Login succsessful",
+        description: "Account created. Welcome aboard",
         status: "success",
         isClosable: true,
       });
     }
-  }, [userInfo, redirect, error, navigate, toast, location.state]);
+  }, [userInfo, redirect, error, navigate, toast]);
 
   return (
     <Formik
-      initialValues={{ email: "", password: "" }}
+      initialValues={{ email: "", password: "", name: "" }}
       validationSchema={Yup.object({
+        name: Yup.string().required("A name is required."),
         email: Yup.string().email("Invalid email").required("An email address is required."),
         password: Yup.string()
           .min(1, "Password is to short - must contain at least 1 character.")
           .required("Password is required"),
+        confirmPassword: Yup.string()
+          .min(1, "Password is to short - must contain at least 1 character.")
+          .required("Password is required")
+          .oneOf([Yup.ref("password"), null], "Passwords must match."),
       })}
       onSubmit={(values) => {
-        dispatch(login(values.email, values.password));
+        dispatch(register(values.name, values.email, values.password));
       }}
     >
       {(formik) => (
@@ -74,11 +70,12 @@ const LoginScreen = () => {
           <Stack spacing="8">
             <Stack spacing="6">
               <Stack spacing={{ base: "2", md: "3" }} textAlign="center">
-                <Heading size={headingBR}>Login to your account</Heading>
+                <Heading size={headingBR}>Create an account</Heading>
+
                 <HStack spacing="1" justify="center">
-                  <Text color="muted">Don't have an account?</Text>
-                  <Button as={ReactLink} to="/registration" variant="link" colorScheme="purple">
-                    Sign up
+                  <Text color="muted">Already a user?</Text>
+                  <Button as={ReactLink} to="/login" variant="link" colorScheme="purple">
+                    Sign in
                   </Button>
                 </HStack>
                 <div
@@ -88,7 +85,7 @@ const LoginScreen = () => {
                     color: "#d6bcfa",
                   }}
                 >
-                  <FaUser fontSize={"1.25rem"} />
+                  <FaUserPlus fontSize={"1.25rem"} />
                 </div>
               </Stack>
             </Stack>
@@ -114,18 +111,31 @@ const LoginScreen = () => {
                 )}
                 <Stack spacing="5">
                   <FormControl>
+                    <TextField
+                      type="text"
+                      name="name"
+                      placeholder="Your first and last name"
+                      label="Full name"
+                    />
+
                     <TextField type="text" name="email" placeholder="you@example.com" label="Email" />
                     <PasswordTextField
                       type="password"
                       name="password"
-                      placeholder="your password"
+                      placeholder="Your password"
                       label="Password"
+                    />
+                    <PasswordTextField
+                      type="password"
+                      name="confirmPassword"
+                      placeholder="Confirm your password"
+                      label="Confirm your password"
                     />
                   </FormControl>
                 </Stack>
                 <Stack spacing="6">
                   <Button colorScheme="purple" size="lg" fontSize="md" isLoading={loading} type="submit">
-                    Sign in
+                    Sign up
                   </Button>
                 </Stack>
               </Stack>
@@ -137,4 +147,4 @@ const LoginScreen = () => {
   );
 };
 
-export default LoginScreen;
+export default RegistraionScreen;
