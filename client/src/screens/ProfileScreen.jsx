@@ -65,7 +65,6 @@ const ProfileScreen = () => {
           .oneOf([Yup.ref("password"), null], "Passwords must match."),
       })}
       onSubmit={(values) => {
-        dispatch(resetUpdateSuccess());
         dispatch(updateProfile(userInfo._id, values.name, values.email, values.password));
       }}
     >
