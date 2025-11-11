@@ -38,12 +38,32 @@ const CheckoutOrderSummary = () => {
     () => Number(shipping() === 0 ? Number(subtotal) : Number(subtotal) + shipping()).toFixed(2),
     [shipping, subtotal]
   );
-  const onPaymentSuccess = () => {
+  const onPaymentSuccess = (capture) => {
+    const paymentDetails = {
+      orderId: capture?.id,
+      payerId: capture?.payer?.payer_id,
+    };
+    const orderItems = cart.map((i) => ({
+      product_id: i.id,
+      name: i.name,
+      image: i.image,
+      price: i.price,
+      qty: i.qty,
+    }));
+    const payload = {
+      orderItems,
+      paymentMethod: "PayPal",
+      shippingPrice: Math.round(shipping()),
+      totalPrice: Number(total()),
+      paymentDetails,
+    };
+    dispatch(createOrder(payload));
     alert("Order success");
   };
 
-  const onPaymentError = () => {
-    alert("Order error");
+  const onPaymentError = (e) => {
+    console.error(e);
+    alert(e?.message || "Order error");
   };
 
   const buttonStyle = {
@@ -89,7 +109,14 @@ const CheckoutOrderSummary = () => {
         </Flex>
       </Stack>
       <Stack>
-        <PayPalButton total={total} onPaymentSuccess={onPaymentSuccess} onPaymentError={onPaymentError} />
+        <PayPalButton
+          total={total}
+          cart={cart}
+          shippingPrice={shipping()}
+          token={userInfo?.token}
+          onPaymentSuccess={onPaymentSuccess}
+          onPaymentError={onPaymentError}
+        />
       </Stack>
       <Box align="center">
         <Text fontSize="sm">Have questions? or need help to complete your order?</Text>

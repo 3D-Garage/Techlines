@@ -6,24 +6,18 @@ import protectRoute from "../middleware/autMiddleware.js";
 const orderRoutes = express.Router();
 
 const createOrder = asyncHandler(async (req, res) => {
-  const {
-    orderItems,
-    shippingAddress,
-    paymentMethod,
-    shippingPrice,
-    totalPrice,
-    paymentDetails,
-    userInfo,
-  } = req.body;
+  const { orderItems, shippingAddress, paymentMethod, shippingPrice, totalPrice, paymentDetails } = req.body;
   if (orderItems && orderItems.length === 0) {
     res.status(400);
     throw new Error("No order items.");
   } else {
+    // Prefer authenticated user from token over client-provided data
+    const userFromToken = req.user;
     const order = new Order({
       orderItems,
-      user: userInfo._id,
-      username: userInfo.name,
-      email: userInfo.email,
+      user: userFromToken?._id,
+      username: userFromToken?.name,
+      email: userFromToken?.email,
       shippingAddress,
       paymentMethod,
       paymentDetails,
@@ -39,3 +33,4 @@ const createOrder = asyncHandler(async (req, res) => {
 orderRoutes.route("/").post(protectRoute, createOrder);
 
 export default orderRoutes;
+export { createOrder };

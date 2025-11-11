@@ -12,6 +12,7 @@ export const getShippingAddressError = (value) => (dispatch) => {
 export const createOrder = (order) => async (dispatch, getState) => {
   const {
     order: { shippingAddress },
+    user: { userInfo },
   } = getState();
 
   const prepareOrder = { ...order, shippingAddress };
@@ -19,6 +20,7 @@ export const createOrder = (order) => async (dispatch, getState) => {
     const config = {
       headers: {
         "Content-Type": "application/json",
+        authorization: userInfo?.token ? `Bearer ${userInfo.token}` : undefined,
       },
     };
     const { data } = await axios.post("/api/orders", prepareOrder, config);
