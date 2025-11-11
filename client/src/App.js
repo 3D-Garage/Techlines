@@ -1,3 +1,4 @@
+// App root: sets up Chakra UI provider, router, and top-level routes
 import { ChakraProvider } from "@chakra-ui/react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar";

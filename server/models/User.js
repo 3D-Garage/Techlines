@@ -1,3 +1,4 @@
+// User model: authentication fields and bcrypt helpers
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 

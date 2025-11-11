@@ -1,3 +1,4 @@
+// CheckoutItem: cart line item with quantity selector and price
 import { Flex, Select, useColorModeValue as mode, Box, Text, Divider, Spacer, Image } from "@chakra-ui/react";
 import { useDispatch } from "react-redux";
 import { addCartItem } from "../redux/actions/cartAction";

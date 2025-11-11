@@ -1,3 +1,4 @@
+// User actions: login/logout, register, and profile update
 import axios from "axios";
 import user, {
   setLoading,
@@ -8,6 +9,7 @@ import user, {
   resetUpdate,
 } from "../slices/user";
 
+// Authenticate and store user
 export const login = (email, password) => async (dispatch) => {
   dispatch(setLoading(true));
   try {
@@ -30,11 +32,13 @@ export const login = (email, password) => async (dispatch) => {
   }
 };
 
+// Clear user from storage and state
 export const logout = () => (dispatch) => {
   localStorage.removeItem("userInfo");
   dispatch(userLogout());
 };
 
+// Create new account
 export const register = (name, email, password) => async (dispatch) => {
   dispatch(setLoading(true));
   try {
@@ -57,6 +61,7 @@ export const register = (name, email, password) => async (dispatch) => {
   }
 };
 
+// Update user profile
 export const updateProfile = (id, name, email, password) => async (dispatch, getState) => {
   const {
     user: { userInfo },
@@ -82,6 +87,7 @@ export const updateProfile = (id, name, email, password) => async (dispatch, get
   }
 };
 
+// Reset update success flag
 export const resetUpdateSuccess = () => async (dispatch) => {
   dispatch(resetUpdate());
 };

@@ -1,3 +1,4 @@
+// User API routes: login, register, and profile update
 import express from "express";
 import User from "../models/User.js";
 import asyncHandler from "express-async-handler";
@@ -8,11 +9,13 @@ const userRoutes = express.Router();
 
 //TODO? redefine expiresIn
 // Generates a JWT token with a 60-day expiration using the provided user ID and secret key
+// Generate JWT for a user id
 const genToken = (id) => {
   return jwt.sign({ id }, process.env.TOKEN_SECRET, { expiresIn: "60d" });
 };
 
 // Async function for handling user login, including user and password validation. Sends a JSON response with user data and a generated token if the credentials are valid, otherwise throws an error.
+// POST /api/users/login - authenticate and return user/token
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   const user = await User.findOne({ email });
@@ -32,6 +35,7 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 //POST register user
+// POST /api/users/register - create account and return user/token
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -55,11 +59,12 @@ const registerUser = asyncHandler(async (req, res) => {
       token: genToken(user._id),
     });
   } else {
-    res.json(400);
+    res.status(500);
     throw new Error("Invalid user data.");
   }
 });
 
+// PUT /api/users/profile/:id - update profile (protected)
 const updateUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (user) {
@@ -84,6 +89,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
   }
 });
 
+// Wire routes
 userRoutes.route("/login").post(loginUser);
 userRoutes.route("/register").post(registerUser);
 userRoutes.route("/profile/:id").put(protectRoute, updateUserProfile);

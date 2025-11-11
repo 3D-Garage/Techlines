@@ -14,3 +14,4 @@ const TextField = ({ label, type, name, placeholder }) => {
 };
 
 export default TextField;
+// TextField: controlled text input with label and error display

@@ -47,3 +47,4 @@ export default function PayPalButton2() {
     </PayPalScriptProvider>
   );
 }
+// PayPalButton2: alternative PayPal integration variant

@@ -88,3 +88,4 @@ const Home = () => (
 );
 
 export default Home;
+// LandingScreen: marketing/landing page with CTA to products

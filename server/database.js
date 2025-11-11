@@ -1,6 +1,7 @@
-//connection to our database.
+// Database connector: initialize and log MongoDB connection
 import mongoose from "mongoose";
 
+// Connects to Mongo using MONGO_URI from env; logs success/errors
 const connectToDatabase = async () => {
   try {
     mongoose.set("strictQuery", false);

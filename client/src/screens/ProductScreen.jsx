@@ -315,3 +315,4 @@ const ProductScreen = () => {
 };
 
 export default ProductScreen;
+// ProductScreen: detailed view for a single product

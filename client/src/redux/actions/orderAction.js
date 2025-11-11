@@ -1,14 +1,18 @@
+// Order actions: manage shipping address and order creation
 import axios from "axios";
 import { setError, shippingAddressAdd } from "../slices/order";
 
+// Save shipping address form data
 export const setShippingAdress = (data) => (dispatch) => {
   dispatch(shippingAddressAdd(data));
 };
 
+// Set validation error for shipping address
 export const getShippingAddressError = (value) => (dispatch) => {
   dispatch(setError(value));
 };
 
+// Create an order on the backend
 export const createOrder = (order) => async (dispatch, getState) => {
   const {
     order: { shippingAddress },

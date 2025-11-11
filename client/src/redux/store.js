@@ -1,3 +1,4 @@
+// Redux store: combines slices and exports configured store
 import { combineReducers, configureStore } from "@reduxjs/toolkit";
 
 import products from "./slices/products";

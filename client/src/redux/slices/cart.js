@@ -1,5 +1,7 @@
+// Cart slice: manages cart items, subtotal, and persistence
 import { createSlice } from "@reduxjs/toolkit";
 
+// Helper: compute subtotal from cart items
 const calcSubtotal = (cartState) => {
   let result = 0;
   cartState.map((item) => (result += item.qty * item.price));
@@ -16,6 +18,7 @@ export const initialState = {
     : 0,
 };
 
+// Persist cart and subtotal to localStorage
 const updateLocalStorage = (cart) => {
   localStorage.setItem("cartItems", JSON.stringify(cart));
   localStorage.setItem("subtotal", JSON.stringify(calcSubtotal(cart)));

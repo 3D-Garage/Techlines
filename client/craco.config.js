@@ -1,3 +1,4 @@
+// CRACO config: dev-server tweaks for local development
 // client/craco.config.js
 module.exports = {
   devServer: (devServerConfig) => {
@@ -6,6 +7,7 @@ module.exports = {
     // (opcionális) ha szükséges:
     // devServerConfig.host = 'localhost';
     // devServerConfig.port = 3000;
+    // Return the mutated devServer config
     return devServerConfig;
   },
 };

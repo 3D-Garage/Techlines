@@ -1,3 +1,4 @@
+// React entrypoint: mounts <App/> with Redux provider
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";

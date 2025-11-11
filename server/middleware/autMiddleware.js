@@ -1,7 +1,9 @@
+// JWT authentication middleware: validates Bearer token and attaches user
 import jwt from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
 import User from "../models/User.js";
 
+// Guard protected routes; 401 on missing/invalid token
 const protectRoute = asyncHandler(async (req, res, next) => {
   let token;
 

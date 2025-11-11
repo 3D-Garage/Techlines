@@ -1,3 +1,4 @@
+// CartItem: display a cart item with remove button
 import {
   CloseButton,
   Flex,

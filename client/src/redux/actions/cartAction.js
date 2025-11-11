@@ -1,3 +1,4 @@
+// Cart actions: add/remove items and handle errors
 import axios from "axios";
 import {
   setLoading,
@@ -6,6 +7,7 @@ import {
   cartItemRemoval,
 } from "../slices/cart";
 
+// Fetch product by id and add to cart with selected qty
 export const addCartItem = (id, qty) => async (dispatch) => {
   dispatch(setLoading(true));
   try {
@@ -32,6 +34,7 @@ export const addCartItem = (id, qty) => async (dispatch) => {
   }
 };
 
+// Remove item from cart by product id
 export const removeCartitem = (id) => async (dispatch) => {
   dispatch(setLoading(true));
   dispatch(cartItemRemoval(id));

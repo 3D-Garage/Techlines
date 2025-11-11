@@ -1,3 +1,4 @@
+// Products slice: handles product list/details and loading/error state
 import { createSlice } from "@reduxjs/toolkit";
 
 export const initialState = {

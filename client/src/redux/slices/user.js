@@ -1,3 +1,4 @@
+// User slice: auth state and profile updates
 import { createSlice } from "@reduxjs/toolkit";
 
 export const initialState = {

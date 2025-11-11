@@ -1,3 +1,4 @@
+// Order slice: shipping address and order creation state
 import { createSlice } from "@reduxjs/toolkit";
 
 export const initialState = {

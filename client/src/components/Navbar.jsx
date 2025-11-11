@@ -1,3 +1,4 @@
+// Navbar: top navigation, theme toggle, user menu, and cart link
 import {
   Box,
   Flex,

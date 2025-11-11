@@ -1,3 +1,4 @@
+// Order model: purchase details, items, shipping, and status
 import mongoose from "mongoose";
 
 const orderSchema = new mongoose.Schema(

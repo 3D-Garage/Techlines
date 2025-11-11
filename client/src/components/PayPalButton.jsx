@@ -71,3 +71,4 @@ const PayPalButton = ({ total, onPaymentSuccess, onPaymentError }) => {
 };
 
 export default PayPalButton;
+// PayPalButton: renders PayPal checkout for the current order

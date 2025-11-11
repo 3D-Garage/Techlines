@@ -7,7 +7,9 @@
   "scripts": {
     "client": "npm run start --prefix client",
     "server": "node server/index.js",
-    "app": "concurrently \"npm run server\" \"npm run client\""
+    "app": "concurrently \"npm run server\" \"npm run client\"",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --coverage",
+    "test:watch": "npm run test -- --watch"
   },
   "repository": {
     "type": "git",
@@ -28,5 +30,9 @@
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^7.0.4",
     "react-scripts": "^5.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.4"
   }
 }

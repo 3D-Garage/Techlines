@@ -82,3 +82,4 @@ const CartScreen = () => {
 };
 
 export default CartScreen;
+// CartScreen: shopping cart page with items and summary

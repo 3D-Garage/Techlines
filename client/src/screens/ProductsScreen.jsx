@@ -56,3 +56,4 @@ const ProductsScreen = () => {
 };
 
 export default ProductsScreen;
+// ProductsScreen: grid/list of all products

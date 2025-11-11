@@ -148,3 +148,4 @@ const RegistraionScreen = () => {
 };
 
 export default RegistraionScreen;
+// RegistraionScreen: user registration form

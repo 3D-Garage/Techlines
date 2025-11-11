@@ -1,5 +1,7 @@
+// Product model and review subdocument definitions
 import mongoose from "mongoose";
 
+// Review subdocument schema for product reviews
 const reviewSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
@@ -11,6 +13,7 @@ const reviewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Main Product schema
 const productSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },

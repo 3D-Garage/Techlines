@@ -1,3 +1,4 @@
+// Product actions: load list and single product details
 import axios from "axios";
 import {
   setProducts,
@@ -6,6 +7,7 @@ import {
   setProduct,
 } from "../slices/products";
 
+// Load all products
 export const getProducts = () => async (dispatch) => {
   dispatch(setLoading(true));
   try {
@@ -24,6 +26,7 @@ export const getProducts = () => async (dispatch) => {
   }
 };
 
+// Load a single product by id
 export const getProduct = (id) => async (dispatch) => {
   dispatch(setLoading(true));
   try {

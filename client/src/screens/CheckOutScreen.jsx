@@ -34,3 +34,4 @@ const CheckOutScreen = () => {
 };
 
 export default CheckOutScreen;
+// CheckOutScreen: checkout page collecting shipping and payment

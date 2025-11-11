@@ -1,3 +1,4 @@
+// CheckoutOrderSummary: shows checkout totals and PayPal button
 import {
   Flex,
   Heading,

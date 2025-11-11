@@ -115,3 +115,4 @@ const ProductCard = ({ product }) => {
 };
 
 export default ProductCard;
+// ProductCard: product tile with image, title, price and link
