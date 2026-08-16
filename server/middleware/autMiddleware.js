@@ -27,4 +27,14 @@ const protectRoute = asyncHandler(async (req, res, next) => {
   }
 });
 
+const admin = (req, res, next) => {
+  if (req.user?.isAdmin === true) {
+    return next();
+  }
+
+  res.status(403);
+  throw new Error("Not authorized as an admin.");
+};
+
+export { protectRoute, admin };
 export default protectRoute;

@@ -1,13 +1,10 @@
-import { useEffect } from "react";
 import { PayPalScriptProvider, PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js";
-import PAYPAL_CLIENT_ID from "../client_id";
-import { Box, useColorModeValue as mode } from "@chakra-ui/react";
+import { useEffect, useState } from "react";
+import { Alert, AlertIcon, Box, Spinner, useColorModeValue as mode } from "@chakra-ui/react";
 // This values are the props in the UI
-const currency = "HUF";
 const style = { layout: "vertical", color: "gold" };
 
 const ButtonWrapper = ({
-  currency,
   showSpinner,
   total,
   onPaymentSuccess,
@@ -15,22 +12,15 @@ const ButtonWrapper = ({
   cart,
   shippingPrice,
   token,
+  disabled,
 }) => {
-  const [{ options, isPending }, dispatch] = usePayPalScriptReducer();
-  useEffect(() => {
-    dispatch({
-      type: "resetOptions",
-      value: {
-        ...options,
-        currency: currency,
-      },
-    });
-  }, [currency, showSpinner]);
+  const [{ isPending }] = usePayPalScriptReducer();
 
   return (
     <>
       {showSpinner && isPending && <div className="spinner" />}
       <PayPalButtons
+        disabled={disabled}
         style={style}
         forceReRender={[Math.round(total()), "HUF"]}
         fundingSource={undefined}
@@ -84,25 +74,44 @@ const ButtonWrapper = ({
   );
 };
 
-const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingPrice, token }) => {
+const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingPrice, token, disabled }) => {
+  const [clientId, setClientId] = useState("");
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    const loadClientId = async () => {
+      try {
+        const response = await fetch("/api/paypal/client-id");
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.message || "PayPal is unavailable.");
+        setClientId(data.clientId);
+      } catch (error) {
+        setLoadError(error.message);
+      }
+    };
+    loadClientId();
+  }, []);
+
+  if (loadError) return <Alert status="error" rounded="md"><AlertIcon />{loadError}</Alert>;
+  if (!clientId) return <Spinner color="purple.500" alignSelf="center" />;
+
   return (
     <Box
       border="1px solid"
-      borderColor={mode("transparent", "rgba(255,255,255,0.6)")}
+      borderColor={mode("gray.200", "gray.700")}
       borderRadius="md"
       overflow="hidden"
       p={2}
-      bg={mode("transparent", "white")}
+      bg={mode("white", "transparent")}
     >
       <PayPalScriptProvider
         options={{
-          "client-id": PAYPAL_CLIENT_ID,
+          "client-id": clientId,
           currency: "HUF",
           components: "buttons",
         }}
       >
         <ButtonWrapper
-          currency={currency}
           showSpinner={false}
           total={total}
           onPaymentSuccess={onPaymentSuccess}
@@ -110,6 +119,7 @@ const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingP
           cart={cart}
           shippingPrice={shippingPrice}
           token={token}
+          disabled={disabled}
         />
       </PayPalScriptProvider>
     </Box>

@@ -8,16 +8,16 @@ import {
   Box,
   Link,
   Divider,
-  useDisclosure,
+  useToast,
 } from "@chakra-ui/react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link as ReactLink } from "react-router-dom";
+import { Link as ReactLink, useNavigate } from "react-router-dom";
 import { PhoneIcon, EmailIcon, ChatIcon } from "@chakra-ui/icons";
-import { createOrder } from "../redux/actions/orderAction";
+import { createOrder, resetOrder } from "../redux/actions/orderAction";
 import { useEffect, useState, useCallback } from "react";
 import CheckoutItem from "./CheckoutItem";
 import PayPalButton from "./PayPalButton";
-import PayPalButton2 from "./PayPalButton2";
+import { resetCart } from "../redux/actions/cartAction";
 const CheckoutOrderSummary = () => {
   const colorMode = mode("gray.600", "gray.400");
   const cartItems = useSelector((state) => state.cart);
@@ -26,11 +26,13 @@ const CheckoutOrderSummary = () => {
   const { userInfo } = user;
   const shippingInfo = useSelector((state) => state.order);
   const { error, shippingAddress } = shippingInfo;
-  const [buttonDisabled, setButtonDisabled] = useState(false);
+  const [buttonDisabled, setButtonDisabled] = useState(true);
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const toast = useToast();
 
   const shipping = useCallback(
-    () => (expressShipping === "true" ? 14.99 : subtotal <= 1000 ? 4.99 : 0),
+    () => (expressShipping === "true" ? 3990 : subtotal < 10000 ? 1490 : 0),
     [expressShipping, subtotal]
   );
 
@@ -38,7 +40,11 @@ const CheckoutOrderSummary = () => {
     () => Number(shipping() === 0 ? Number(subtotal) : Number(subtotal) + shipping()).toFixed(2),
     [shipping, subtotal]
   );
-  const onPaymentSuccess = (capture) => {
+  useEffect(() => {
+    setButtonDisabled(Boolean(error) || !shippingAddress || cart.length === 0);
+  }, [error, shippingAddress, cart.length]);
+
+  const onPaymentSuccess = async (capture) => {
     const paymentDetails = {
       orderId: capture?.id,
       payerId: capture?.payer?.payer_id,
@@ -57,17 +63,18 @@ const CheckoutOrderSummary = () => {
       totalPrice: Number(total()),
       paymentDetails,
     };
-    dispatch(createOrder(payload));
-    alert("Order success");
+    try {
+      await dispatch(createOrder(payload));
+      dispatch(resetCart());
+      dispatch(resetOrder());
+      navigate("/order-success");
+    } catch (_error) {
+      toast({ description: "The payment was captured, but the order could not be saved. Please contact support.", status: "error", duration: 12000, isClosable: true });
+    }
   };
 
   const onPaymentError = (e) => {
-    console.error(e);
-    alert(e?.message || "Order error");
-  };
-
-  const buttonStyle = {
-    background: "red",
+    toast({ description: e?.message || "The payment could not be completed.", status: "error", isClosable: true });
   };
 
   return (
@@ -82,7 +89,7 @@ const CheckoutOrderSummary = () => {
             Subtotal
           </Text>
           <Text fontWeight="medium" color={colorMode}>
-            {subtotal}
+            {Number(subtotal).toLocaleString("hu-HU")} Ft
           </Text>
         </Flex>
         <Flex justify="space-between">
@@ -95,7 +102,7 @@ const CheckoutOrderSummary = () => {
                 Free
               </Badge>
             ) : (
-              `${shipping()} Ft`
+              `${Number(shipping()).toLocaleString("hu-HU")} Ft`
             )}
           </Text>
         </Flex>
@@ -104,7 +111,7 @@ const CheckoutOrderSummary = () => {
             Total
           </Text>
           <Text fontSize="xl" fontWeight="extrabold">
-            {Number(total())} Ft
+            {Number(total()).toLocaleString("hu-HU")} Ft
           </Text>
         </Flex>
       </Stack>
@@ -116,6 +123,7 @@ const CheckoutOrderSummary = () => {
           token={userInfo?.token}
           onPaymentSuccess={onPaymentSuccess}
           onPaymentError={onPaymentError}
+          disabled={buttonDisabled}
         />
       </Stack>
       <Box align="center">

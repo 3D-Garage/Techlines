@@ -19,7 +19,7 @@ function MyImage() {
   const darkImageSrc = require("../logo/3d-printer_light.png");
 
   const imageSrc = useColorModeValue(lightImageSrc, darkImageSrc);
-  return <img height={"36px"} width={"36px"} src={imageSrc} alt="My Image" />;
+  return <img height={"36px"} width={"36px"} src={imageSrc} alt="3D Garage printer logo" />;
 }
 
 const Home = () => (

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { setError, shippingAddressAdd } from "../slices/order";
+import { setError, shippingAddressAdd, orderCreated, clearOrder, setLoading } from "../slices/order";
 
 export const setShippingAdress = (data) => (dispatch) => {
   dispatch(shippingAddressAdd(data));
@@ -10,6 +10,7 @@ export const getShippingAddressError = (value) => (dispatch) => {
 };
 
 export const createOrder = (order) => async (dispatch, getState) => {
+  dispatch(setLoading(true));
   const {
     order: { shippingAddress },
     user: { userInfo },
@@ -24,13 +25,17 @@ export const createOrder = (order) => async (dispatch, getState) => {
       },
     };
     const { data } = await axios.post("/api/orders", prepareOrder, config);
+    dispatch(orderCreated(data));
+    return data;
   } catch (error) {
     dispatch(
       setError(
-        error.response && error.response.data
-          ? error.message
-          : "An unexpected error has occured. Please try again later"
+        error.response?.data?.message || error.response?.data || error.message ||
+          "An unexpected error has occurred. Please try again later"
       )
     );
+    throw error;
   }
 };
+
+export const resetOrder = () => (dispatch) => dispatch(clearOrder());

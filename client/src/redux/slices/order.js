@@ -22,10 +22,21 @@ export const orderSlice = createSlice({
       state.shippingAddress = payload;
       state.loading = false;
     },
+    orderCreated: (state, { payload }) => {
+      state.orderInfo = payload;
+      state.loading = false;
+      state.error = null;
+    },
+    clearOrder: (state) => {
+      state.shippingAddress = null;
+      state.orderInfo = null;
+      state.error = null;
+      state.loading = false;
+    },
   },
 });
 
-export const { setError, setLoading, shippingAddressAdd } = orderSlice.actions;
+export const { setError, setLoading, shippingAddressAdd, orderCreated, clearOrder } = orderSlice.actions;
 export default orderSlice.reducer;
 
 export const orderSelector = (state) => state.order;

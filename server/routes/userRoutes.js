@@ -3,6 +3,8 @@ import User from "../models/User.js";
 import asyncHandler from "express-async-handler";
 import jwt from "jsonwebtoken";
 import protectRoute from "../middleware/autMiddleware.js";
+import { admin } from "../middleware/autMiddleware.js";
+import Order from "../models/Order.js";
 
 const userRoutes = express.Router();
 
@@ -101,9 +103,40 @@ const updateUserProfile = asyncHandler(async (req, res) => {
   }
 });
 
+const getUserOrders = asyncHandler(async (req, res) => {
+  if (req.user._id.toString() !== req.params.id && !req.user.isAdmin) {
+    res.status(403);
+    throw new Error("Forbidden");
+  }
+
+  const orders = await Order.find({ user: req.params.id }).sort({ createdAt: -1 });
+  res.json(orders);
+});
+
+const getUsers = asyncHandler(async (_req, res) => {
+  const users = await User.find({}).select("-password").sort({ createdAt: -1 });
+  res.json(users);
+});
+
+const deleteUser = asyncHandler(async (req, res) => {
+  if (req.user._id.toString() === req.params.id) {
+    res.status(400);
+    throw new Error("You cannot remove your own admin account.");
+  }
+
+  const user = await User.findByIdAndDelete(req.params.id);
+  if (!user) {
+    res.status(404);
+    throw new Error("User not found.");
+  }
+  res.json({ _id: user._id });
+});
+
 userRoutes.route("/login").post(loginUser);
 userRoutes.route("/register").post(registerUser);
 userRoutes.route("/profile/:id").put(protectRoute, updateUserProfile);
+userRoutes.route("/").get(protectRoute, admin, getUsers);
+userRoutes.route("/:id").get(protectRoute, getUserOrders).delete(protectRoute, admin, deleteUser);
 
 export default userRoutes;
-export { loginUser, registerUser, updateUserProfile, genToken };
+export { loginUser, registerUser, updateUserProfile, getUserOrders, getUsers, deleteUser, genToken };

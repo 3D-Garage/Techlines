@@ -6,6 +6,14 @@ import * as paypalSvcImport from "../services/paypalService.js";
 
 const paypalRoutes = express.Router();
 
+export const getPayPalClientIdHandler = (_req, res) => {
+  if (!process.env.PAYPAL_CLIENT_ID) {
+    res.status(503);
+    return res.json({ message: "PayPal is not configured." });
+  }
+  return res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
+};
+
 // indirection to allow mocking in tests
 let svc = paypalSvcImport;
 export const __setPayPalService = (mock) => {
@@ -52,6 +60,6 @@ export const capturePayPalOrderHandler = asyncHandler(async (req, res) => {
 
 paypalRoutes.post("/create-order", protectRoute, createPayPalOrderHandler);
 paypalRoutes.post("/capture-order", protectRoute, capturePayPalOrderHandler);
+paypalRoutes.get("/client-id", getPayPalClientIdHandler);
 
 export default paypalRoutes;
-

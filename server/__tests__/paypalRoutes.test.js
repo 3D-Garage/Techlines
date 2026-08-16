@@ -4,6 +4,7 @@ import paypalRoutes, {
   __setPayPalService,
   createPayPalOrderHandler,
   capturePayPalOrderHandler,
+  getPayPalClientIdHandler,
 } from "../routes/paypalRoutes.js";
 import Product from "../models/Product.js";
 
@@ -53,3 +54,13 @@ test("capturePayPalOrderHandler returns capture payload", async () => {
   assert.deepEqual(res.payload, { id: "ORDER123", status: "COMPLETED" });
 });
 
+test("getPayPalClientIdHandler returns the configured public client id", () => {
+  const previousClientId = process.env.PAYPAL_CLIENT_ID;
+  process.env.PAYPAL_CLIENT_ID = "public-client-id";
+  const { req, res } = mockReqRes();
+  getPayPalClientIdHandler(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.payload, { clientId: "public-client-id" });
+  if (previousClientId === undefined) delete process.env.PAYPAL_CLIENT_ID;
+  else process.env.PAYPAL_CLIENT_ID = previousClientId;
+});
