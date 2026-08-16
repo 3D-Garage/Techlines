@@ -2,7 +2,9 @@ import express from "express";
 import User from "../models/User.js";
 import asyncHandler from "express-async-handler";
 import jwt from "jsonwebtoken";
-import protectRoute from "../Middleware/autMiddleware.js";
+import protectRoute from "../middleware/autMiddleware.js";
+import { admin } from "../middleware/autMiddleware.js";
+import Order from "../models/Order.js";
 
 const userRoutes = express.Router();
 
@@ -15,6 +17,10 @@ const genToken = (id) => {
 // Async function for handling user login, including user and password validation. Sends a JSON response with user data and a generated token if the credentials are valid, otherwise throws an error.
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
+  if (!email || !password) {
+    res.status(400);
+    throw new Error("Email and password are required");
+  }
   const user = await User.findOne({ email });
   if (user && (await user.matchPasswords(password))) {
     res.json({
@@ -34,6 +40,14 @@ const loginUser = asyncHandler(async (req, res) => {
 //POST register user
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
+  if (!name || !email || !password) {
+    res.status(400);
+    throw new Error("Name, email and password are required");
+  }
+  if (typeof password !== "string" || password.length < 6) {
+    res.status(400);
+    throw new Error("Password must be at least 6 characters");
+  }
 
   const userExists = await User.findOne({ email });
   if (userExists) {
@@ -55,7 +69,7 @@ const registerUser = asyncHandler(async (req, res) => {
       token: genToken(user._id),
     });
   } else {
-    res.json(400);
+    res.status(500);
     throw new Error("Invalid user data.");
   }
 });
@@ -63,6 +77,11 @@ const registerUser = asyncHandler(async (req, res) => {
 const updateUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
   if (user) {
+    // Ensure user can only update own profile unless admin
+    if (req.user && req.user._id && req.user._id.toString() !== req.params.id && !req.user.isAdmin) {
+      res.status(403);
+      throw new Error("Forbidden");
+    }
     user.name = req.body.name || user.name;
     user.email = req.body.email || user.email;
     if (req.body.password) {
@@ -84,8 +103,40 @@ const updateUserProfile = asyncHandler(async (req, res) => {
   }
 });
 
+const getUserOrders = asyncHandler(async (req, res) => {
+  if (req.user._id.toString() !== req.params.id && !req.user.isAdmin) {
+    res.status(403);
+    throw new Error("Forbidden");
+  }
+
+  const orders = await Order.find({ user: req.params.id }).sort({ createdAt: -1 });
+  res.json(orders);
+});
+
+const getUsers = asyncHandler(async (_req, res) => {
+  const users = await User.find({}).select("-password").sort({ createdAt: -1 });
+  res.json(users);
+});
+
+const deleteUser = asyncHandler(async (req, res) => {
+  if (req.user._id.toString() === req.params.id) {
+    res.status(400);
+    throw new Error("You cannot remove your own admin account.");
+  }
+
+  const user = await User.findByIdAndDelete(req.params.id);
+  if (!user) {
+    res.status(404);
+    throw new Error("User not found.");
+  }
+  res.json({ _id: user._id });
+});
+
 userRoutes.route("/login").post(loginUser);
 userRoutes.route("/register").post(registerUser);
 userRoutes.route("/profile/:id").put(protectRoute, updateUserProfile);
+userRoutes.route("/").get(protectRoute, admin, getUsers);
+userRoutes.route("/:id").get(protectRoute, getUserOrders).delete(protectRoute, admin, deleteUser);
 
 export default userRoutes;
+export { loginUser, registerUser, updateUserProfile, getUserOrders, getUsers, deleteUser, genToken };

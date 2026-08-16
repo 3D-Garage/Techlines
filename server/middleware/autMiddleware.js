@@ -9,8 +9,12 @@ const protectRoute = asyncHandler(async (req, res, next) => {
     try {
       token = req.headers.authorization.split(" ")[1];
       const decoded = jwt.verify(token, process.env.TOKEN_SECRET);
-      req.user = User.findById(decoded.id);
-      next();
+      req.user = await User.findById(decoded.id).select("-password");
+      if (!req.user) {
+        res.status(401);
+        throw new Error("Not authorized, user not found.");
+      }
+      return next();
     } catch (error) {
       res.status(401);
       throw new Error("Not authorized, token failed.");
@@ -19,8 +23,18 @@ const protectRoute = asyncHandler(async (req, res, next) => {
 
   if (!token) {
     res.status(401);
-    throw new Error("No authorized,no token.");
+    throw new Error("Not authorized, no token.");
   }
 });
 
+const admin = (req, res, next) => {
+  if (req.user?.isAdmin === true) {
+    return next();
+  }
+
+  res.status(403);
+  throw new Error("Not authorized as an admin.");
+};
+
+export { protectRoute, admin };
 export default protectRoute;

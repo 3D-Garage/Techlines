@@ -8,7 +8,6 @@ import {
   Stack,
   Text,
   useBreakpointValue,
-  useColorModeValue as mode,
   AlertIcon,
   Alert,
   AlertDescription,
@@ -17,7 +16,7 @@ import {
 } from "@chakra-ui/react";
 import TextField from "../components/TextField";
 import PasswordTextField from "../components/PasswordTextField";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { useDispatch, useSelector } from "react-redux";

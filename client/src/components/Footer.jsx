@@ -10,10 +10,8 @@ import {
   Box,
   useColorModeValue,
   Flex,
-  Icon,
 } from "@chakra-ui/react";
-import { FaGithub, FaLinkedin, FaTwitter, FaFacebook } from "react-icons/fa";
-import { GiTechnoHeart } from "react-icons/gi";
+import { FaGithub, FaTwitter, FaFacebook } from "react-icons/fa";
 
 const Footer = () => (
   <Box w={"100%"} bg={useColorModeValue("gray.100", "gray.900")}>

@@ -4,7 +4,6 @@ import {
   Box,
   Image,
   Badge,
-  useColorModeValue,
   Icon,
   Button,
   Tooltip,
@@ -12,29 +11,29 @@ import {
   Link,
   HStack,
   Text,
-  Center,
   useToast,
+  useColorModeValue,
 } from "@chakra-ui/react";
 import { FiShoppingCart } from "react-icons/fi";
 import { Link as ReactLink } from "react-router-dom";
 import { StarIcon } from "@chakra-ui/icons";
-import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { addCartItem } from "../redux/actions/cartAction";
 
 const Rating = ({ rating, numberOfReviews }) => {
-  const { iconSize, setIconsize } = useState("14px");
+  const iconSize = "14px";
+  const displayedRating = numberOfReviews > 0 ? Number(rating) : 0;
   return (
     <Flex>
       <HStack spacing={2}>
-        <StarIcon size={iconSize} w={"14px"} color={"yellow.500"} />
-        <StarIcon size={iconSize} w={"14px"} color={rating >= 2 ? "yellow.500" : "gray.300"} />
-        <StarIcon size={iconSize} w={"14px"} color={rating >= 3 ? "yellow.500" : "gray.300"} />
-        <StarIcon size={iconSize} w={"14px"} color={rating >= 4 ? "yellow.500" : "gray.300"} />
-        <StarIcon size={iconSize} w={"14px"} color={rating >= 5 ? "yellow.500" : "gray.300"} />
+        <StarIcon size={iconSize} w={"14px"} color={displayedRating >= 1 ? "yellow.500" : "gray.300"} />
+        <StarIcon size={iconSize} w={"14px"} color={displayedRating >= 2 ? "yellow.500" : "gray.300"} />
+        <StarIcon size={iconSize} w={"14px"} color={displayedRating >= 3 ? "yellow.500" : "gray.300"} />
+        <StarIcon size={iconSize} w={"14px"} color={displayedRating >= 4 ? "yellow.500" : "gray.300"} />
+        <StarIcon size={iconSize} w={"14px"} color={displayedRating >= 5 ? "yellow.500" : "gray.300"} />
       </HStack>
       <Text fontSize={"md"} fontWeight={"bold"} ml={"4px"}>
-        {`${numberOfReviews} ${(numberOfReviews === 1) | (numberOfReviews === 0) ? "Review" : "Reviews"}`}
+        {`${numberOfReviews} ${numberOfReviews === 1 ? "Review" : "Reviews"}`}
       </Text>
     </Flex>
   );
@@ -63,7 +62,20 @@ const ProductCard = ({ product }) => {
     }
   };
   return (
-    <Stack p="3" spacing="3px" minW="240px" minH={"450px"} borderWidth="1px" rounded="lg" position="relative">
+    <Stack
+      p="3"
+      spacing="3px"
+      minW="240px"
+      minH="450px"
+      bg={useColorModeValue("white", "gray.800")}
+      borderWidth="1px"
+      borderColor={useColorModeValue("gray.200", "gray.700")}
+      rounded="lg"
+      shadow="lg"
+      position="relative"
+      transition="transform 0.2s ease, box-shadow 0.2s ease"
+      _hover={{ transform: "translateY(-2px)", shadow: "xl" }}
+    >
       {product.productIsNew && (
         <Circle size={"10px"} position="absolute" top={2} right={2} bg={"green.300"} />
       )}

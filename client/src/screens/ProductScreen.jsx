@@ -11,7 +11,6 @@ import {
   AlertDescription,
   AlertTitle,
   Flex,
-  Link,
   Badge,
   Heading,
   HStack,
@@ -21,19 +20,24 @@ import {
   ButtonGroup,
   IconButton,
   Square,
+  Tooltip,
+  Input,
+  Textarea,
 } from "@chakra-ui/react";
-import { MinusIcon, StarIcon, SmallAddIcon, AddIcon } from "@chakra-ui/icons";
+import { MinusIcon, StarIcon, AddIcon } from "@chakra-ui/icons";
 import { BiPackage, BiCheckShield, BiSupport } from "react-icons/bi";
 import { CgSmileNone } from "react-icons/cg";
 import { useDispatch, useSelector } from "react-redux";
-import { getProduct } from "../redux/actions/productAction";
+import { createProductReview, getProduct, resetProductError } from "../redux/actions/productAction";
 import { addCartItem } from "../redux/actions/cartAction";
 import { useEffect, useState } from "react";
-import { Link as ReactLink } from "react-router-dom";
-import { color } from "framer-motion";
 
 const ProductScreen = () => {
   const [amount, setAmount] = useState(1);
+  const [comment, setComment] = useState("");
+  const [rating, setRating] = useState(5);
+  const [title, setTitle] = useState("");
+  const [reviewBoxOpen, setReviewBoxOpen] = useState(false);
   let { id } = useParams();
   const toast = useToast();
   //redux
@@ -42,6 +46,8 @@ const ProductScreen = () => {
   const { loading, error, product } = products;
   const cartContent = useSelector((state) => state.cart);
   const { cart } = cartContent;
+  const { userInfo } = useSelector((state) => state.user);
+  const displayedRating = product?.numberOfReviews > 0 ? Number(product.rating) : 0;
 
   useEffect(() => {
     dispatch(getProduct(id));
@@ -63,6 +69,25 @@ const ProductScreen = () => {
       status: "success",
       isClosable: true,
     });
+  };
+
+  const hasUserReviewed = () => Boolean(userInfo && product?.reviews?.some((review) => review.user === userInfo._id));
+
+  const submitReview = async () => {
+    if (!comment.trim()) {
+      toast({ description: "Please write a review comment.", status: "warning", isClosable: true });
+      return;
+    }
+    try {
+      await dispatch(createProductReview(product._id, comment, rating, title));
+      toast({ description: "Your review has been published.", status: "success", isClosable: true });
+      setReviewBoxOpen(false);
+      setComment("");
+      setTitle("");
+    } catch (_error) {
+      toast({ description: "The review could not be published.", status: "error", isClosable: true });
+      dispatch(resetProductError());
+    }
   };
 
   return (
@@ -146,25 +171,25 @@ const ProductScreen = () => {
                     <Text fontSize={"xl"}>{product.price} Ft</Text>
                     <Flex>
                       <HStack spacing={2}>
-                        <StarIcon color="purple.500" />
+                        <StarIcon color={displayedRating >= 1 ? "purple.500" : "gray.300"} />
                         <StarIcon
                           color={
-                            product.rating >= 2 ? "purple.500" : "gray.300"
+                            displayedRating >= 2 ? "purple.500" : "gray.300"
                           }
                         />
                         <StarIcon
                           color={
-                            product.rating >= 3 ? "purple.500" : "gray.300"
+                            displayedRating >= 3 ? "purple.500" : "gray.300"
                           }
                         />
                         <StarIcon
                           color={
-                            product.rating >= 4 ? "purple.500" : "gray.300"
+                            displayedRating >= 4 ? "purple.500" : "gray.300"
                           }
                         />
                         <StarIcon
                           color={
-                            product.rating >= 5 ? "purple.500" : "gray.300"
+                            displayedRating >= 5 ? "purple.500" : "gray.300"
                           }
                         />
                       </HStack>
@@ -259,6 +284,25 @@ const ProductScreen = () => {
                 />
               </Flex>
             </Stack>
+            {userInfo && (
+              <Box my="8">
+                <Tooltip label={hasUserReviewed() ? "You have already reviewed this product." : ""}>
+                  <Button colorScheme="purple" isDisabled={hasUserReviewed()} onClick={() => setReviewBoxOpen((open) => !open)}>
+                    Write a review
+                  </Button>
+                </Tooltip>
+                {reviewBoxOpen && (
+                  <Stack mt="4" spacing="3">
+                    <HStack>{[1, 2, 3, 4, 5].map((value) => (
+                      <IconButton key={value} aria-label={`${value} stars`} variant="outline" onClick={() => setRating(value)} icon={<StarIcon color={rating >= value ? "purple.500" : "gray.300"} />} />
+                    ))}</HStack>
+                    <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Review title" focusBorderColor="purple.500" />
+                    <Textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder={`What do you think about ${product.name}?`} focusBorderColor="purple.500" />
+                    <Button alignSelf="flex-start" colorScheme="purple" onClick={submitReview}>Publish review</Button>
+                  </Stack>
+                )}
+              </Box>
+            )}
             <Stack>
               <Text fontSize={"xl"} fontWeight={"bold"}>
                 Reviews
@@ -274,19 +318,19 @@ const ProductScreen = () => {
                       <Flex spacing="2px" alignItems={"center"}>
                         <StarIcon color={"purple.500"} />
                         <StarIcon
-                          color={review >= 2 ? "purple.500" : "gray.300"}
+                          color={review.rating >= 2 ? "purple.500" : "gray.300"}
                         />
                         <StarIcon
-                          color={review >= 3 ? "purple.500" : "gray.300"}
+                          color={review.rating >= 3 ? "purple.500" : "gray.300"}
                         />
                         <StarIcon
-                          color={review >= 4 ? "purple.500" : "gray.300"}
+                          color={review.rating >= 4 ? "purple.500" : "gray.300"}
                         />
                         <StarIcon
-                          color={review >= 5 ? "purple.500" : "gray.300"}
+                          color={review.rating >= 5 ? "purple.500" : "gray.300"}
                         />
                         <Text fontWeight={"semibold"} ml={"4px"}>
-                          {review.tilte && review.tilte}
+                          {review.title}
                         </Text>
                       </Flex>
                       <Box py="12px">{review.comment}</Box>

@@ -1,11 +1,12 @@
 import axios from "axios";
-import user, {
+import {
   setLoading,
   setError,
   userLogin,
   userLogout,
   updateUserProfile,
   resetUpdate,
+  setUserOrders,
 } from "../slices/user";
 
 export const login = (email, password) => async (dispatch) => {
@@ -84,4 +85,17 @@ export const updateProfile = (id, name, email, password) => async (dispatch, get
 
 export const resetUpdateSuccess = () => async (dispatch) => {
   dispatch(resetUpdate());
+};
+
+export const getUserOrders = () => async (dispatch, getState) => {
+  dispatch(setLoading(true));
+  const { userInfo } = getState().user;
+  try {
+    const { data } = await axios.get(`/api/users/${userInfo._id}`, {
+      headers: { Authorization: `Bearer ${userInfo.token}` },
+    });
+    dispatch(setUserOrders(data));
+  } catch (error) {
+    dispatch(setError(error.response?.data?.message || error.response?.data || error.message));
+  }
 };

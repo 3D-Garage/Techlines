@@ -23,7 +23,7 @@ import { HamburgerIcon, CloseIcon, MoonIcon, SunIcon, ChevronDownIcon } from "@c
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../redux/actions/userActions";
-import { MdLocalShipping, MdLogout } from "react-icons/md";
+import { MdLocalShipping, MdLogout, MdOutlineAdminPanelSettings } from "react-icons/md";
 import { CgProfile } from "react-icons/cg";
 import { FaUser } from "react-icons/fa";
 import { FiShoppingCart } from "react-icons/fi";
@@ -138,6 +138,11 @@ const Navbar = () => {
                 <MenuItem as={ReactLink} to={"/your-orders"}>
                   <MdLocalShipping /> <Text ml={2}>Your Orders</Text>
                 </MenuItem>
+                {userInfo.isAdmin === true && (
+                  <MenuItem as={ReactLink} to={"/admin-console"}>
+                    <MdOutlineAdminPanelSettings /> <Text ml={2}>Admin Console</Text>
+                  </MenuItem>
+                )}
                 <MenuDivider />
                 <MenuItem onClick={logoutHandler}>
                   <MdLogout />
@@ -177,9 +182,11 @@ const Navbar = () => {
                 {link.linkName}
               </NavLink>
             ))}
-            <NavLink key={"sing up"} path={"/regestration"}>
-              Sign Up
-            </NavLink>
+            {!userInfo && (
+              <NavLink key={"sign up"} path={"/registration"}>
+                Sign Up
+              </NavLink>
+            )}
           </Stack>
         </Box>
       ) : null}

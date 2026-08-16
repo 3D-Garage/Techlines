@@ -9,6 +9,10 @@ import Home from "./screens/LandingScreen";
 import LoginScreen from "./screens/LoginScreen";
 import RegistraionScreen from "./screens/RegistraionScreen";
 import ProfileScreen from "./screens/ProfileScreen";
+import CheckOutScreen from "./screens/CheckOutScreen";
+import YourOrdersScreen from "./screens/YourOrdersScreen";
+import AdminConsoleScreen from "./screens/AdminConsoleScreen";
+import OrderSuccessScreen from "./screens/OrderSuccessScreen";
 
 function App() {
   return (
@@ -24,6 +28,10 @@ function App() {
             <Route path="/login" element={<LoginScreen />}></Route>
             <Route path="/registration" element={<RegistraionScreen />}></Route>
             <Route path="/profile" element={<ProfileScreen />}></Route>
+            <Route path="/checkout" element={<CheckOutScreen />}></Route>
+            <Route path="/your-orders" element={<YourOrdersScreen />}></Route>
+            <Route path="/admin-console" element={<AdminConsoleScreen />}></Route>
+            <Route path="/order-success" element={<OrderSuccessScreen />}></Route>
           </Routes>
         </main>
         <Footer />
