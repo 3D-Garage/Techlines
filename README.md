@@ -51,3 +51,5 @@ New accounts are customers by default. Set the selected user's `isAdmin` field t
 npm run test:server
 npm run build --prefix client
 ```
+# techlines
+[![CodeScene Code Health](https://codescene.io/projects/39261/status-badges/code-health)](https://codescene.io/projects/39261)
