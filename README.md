@@ -15,6 +15,27 @@ A full-stack 3D-printing webshop built with React, Chakra UI, Redux Toolkit, Exp
 
 ## Local setup
 
+### Automated Windows setup
+
+After cloning the repository, open PowerShell in the project directory and run:
+
+```powershell
+npm run setup:dev
+```
+
+The setup requires Node.js 18 or newer. It performs the following local-only steps:
+
+- creates `.env` with a generated JWT secret and local admin password;
+- installs MongoDB Community Server through Windows Package Manager if needed;
+- starts the MongoDB Windows service;
+- installs root and client npm dependencies;
+- creates the MongoDB collections and indexes;
+- seeds a local admin account and sample products.
+
+The generated admin credentials are printed at the end and stored in the local `.env`. PayPal checkout stays disabled until PayPal sandbox credentials are added. The setup preserves an existing `.env`; use `npm run setup:dev -- -Force` to back it up and generate a replacement.
+
+### Manual setup
+
 1. Install the root and client dependencies:
 
    ```bash

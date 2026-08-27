@@ -6,6 +6,13 @@
 .pnp.js
 node_modules/
 .env
+.env.backup-*
+
+# editor settings
+.vscode/
+.vscode/*
+/.vscode/**
+
 # testing
 /coverage
 /client/src/client_id.js
