@@ -1,6 +1,6 @@
 # 3D Garage – technológiai, architekturális és üzleti dokumentáció
 
-> A dokumentum célja, hogy két fejlesztő gyorsan és közös rendszerképpel tudja folytatni a projektet. A leírás a repository 2026. augusztus 16-i állapotát tükrözi. Ahol a jelenlegi implementáció és a kívánatos üzleti működés eltér, azt külön **Jelenlegi állapot** és **Javasolt célállapot** megjegyzés jelzi.
+> A dokumentum célja, hogy két fejlesztő gyorsan és közös rendszerképpel tudja folytatni a projektet. A leírás a repository 2026. augusztus 27-i állapotát tükrözi. Ahol a jelenlegi implementáció és a kívánatos üzleti működés eltér, azt külön **Jelenlegi állapot** és **Javasolt célállapot** megjegyzés jelzi.
 
 ## Tartalom
 
@@ -116,6 +116,8 @@ Az adminisztrátor saját adminfiókját az adminfelületről nem törölheti.
 | Nyelv | JavaScript / JSX | ECMAScript modules a szerveren | Kliens- és szerveroldali fejlesztés |
 | Backend runtime | Node.js | nincs rögzítve; a natív `fetch` miatt legalább Node 18 javasolt | Express API és PayPal REST-hívások futtatása |
 | Csomagkezelő | npm | lock fájlokkal | Függőségek és scriptek kezelése |
+| Fejlesztői automatizálás | Windows PowerShell | 5.1 vagy újabb | `.env`, MongoDB, dependencyk és seed előkészítése |
+| Windows csomagkezelő | winget | Windows App Installer része | MongoDB Community Server automatikus telepítése |
 | Adatcsere | JSON over HTTP | REST jellegű API | Böngésző–szerver kommunikáció |
 
 > A Node-verzió jelenleg nincs `engines`, `.nvmrc` vagy hasonló fájlban rögzítve. A `server/services/paypalService.js` globális `fetch` API-t használ, ezért a csapat számára célszerű Node 18 vagy újabb LTS-verziót szabványosítani.
@@ -251,10 +253,16 @@ Techlines/
 │   ├── middleware/             # auth, hibakezelés, rate limit
 │   ├── models/                 # User, Product, Order sémák
 │   ├── routes/                 # REST végpontok
+│   ├── scripts/
+│   │   ├── seed.js             # fejlesztői adatbázis inicializálása
+│   │   └── run-tests.js        # platformfüggetlen backend tesztindító
 │   ├── services/               # PayPal REST kliens
 │   ├── database.js             # MongoDB kapcsolat
 │   └── index.js                # Express alkalmazás belépési pont
+├── scripts/
+│   └── setup-dev.ps1           # automatizált Windows fejlesztői telepítés
 ├── .env                        # helyi titkok; nem dokumentálandó és nem commitolandó
+├── .env.example                # commitolható konfigurációs kulcsminta
 ├── package.json                # backend és közös futtatási scriptek
 ├── README.md                   # rövid indítási útmutató
 ├── SECURITY.md                 # biztonsági állapot és teendők
@@ -268,6 +276,9 @@ Techlines/
 - Backend: `server/index.js`
 - Adatbázis: `server/database.js`
 - PayPal: `client/src/components/PayPalButton.jsx` és `server/services/paypalService.js`
+- Windows setup: `scripts/setup-dev.ps1`
+- Adatbázis-seed: `server/scripts/seed.js`
+- Backend tesztindító: `server/scripts/run-tests.js`
 
 ---
 
@@ -894,8 +905,24 @@ A szerver jelenleg konzolra írja az indulást és adatbázis-kapcsolatot. A Pay
 | `PAYPAL_BASE_URL` | nem | Sandbox API URL fejlesztéskor | PayPal környezet kiválasztása |
 | `PORT` | nem | `5000` | Express port |
 | `CORS_ORIGIN` | élesben erősen javasolt | frontend HTTPS origin | engedélyezett böngészős origin |
+| `SEED_ADMIN_NAME` | seed futtatásához ajánlott | helyi admin neve | fejlesztői admin megjelenített neve |
+| `SEED_ADMIN_EMAIL` | seed futtatásához ajánlott | helyi admin e-mailje | fejlesztői admin login azonosítója |
+| `SEED_ADMIN_PASSWORD` | seed futtatásához igen | legalább 6 karakter | fejlesztői admin jelszava |
 
-### 14.2 Titokkezelési szabályok
+### 14.2 `.env.example` és automatikus konfiguráció
+
+A `.env.example` kizárólag a szükséges változóneveket és ártalmatlan helyőrzőket tartalmazza, ezért verziókövetésbe kerülhet. A setup script nem másolja át mechanikusan ezt a fájlt, hanem saját `.env` fájlt generál a repository gyökerében:
+
+- a `TOKEN_SECRET` 48 kriptográfiailag véletlen bájtból készül Base64 formában;
+- a seed admin jelszava külön véletlen tokenből készül;
+- a MongoDB helyi `127.0.0.1:27017/techlines` adatbázisra mutat;
+- a CORS origin `http://localhost:3000`;
+- a PayPal Sandbox URL előre beállított, de a client ID és secret üres marad;
+- a fájl UTF-8, BOM nélküli formátumban jön létre.
+
+Ha már létezik `.env`, a script alapértelmezés szerint változatlanul hagyja. A `-Force` kapcsoló használatakor először időbélyeges `.env.backup-YYYYMMDD-HHMMSS` biztonsági másolat készül, majd új konfiguráció generálódik. A `.gitignore` a valódi `.env` fájlt és a backupokat is kizárja.
+
+### 14.3 Titokkezelési szabályok
 
 - A `.env` nem kerülhet commitba.
 - A PayPal secret és JWT secret nem kerülhet kliensfájlba.
@@ -903,8 +930,10 @@ A szerver jelenleg konzolra írja az indulást és adatbázis-kapcsolatot. A Pay
 - A repositoryban található, nem használt `client/src/client_id.js` fájl hardcode-olt Sandbox adatot tartalmaz; ezt el kell távolítani a verziókövetésből, és az érintett tesztadatot szükség esetén cserélni kell.
 - Éles környezetben a platform secret managerét kell használni.
 - Logba nem kerülhet token, jelszó, PayPal secret vagy teljes fizetési válasz személyes adatokkal.
+- A setup végén kiírt fejlesztői adminjelszót csak helyi tesztelésre szabad használni.
+- A seed admin adatai nem éles admin-provisioning mechanizmusok.
 
-### 14.3 Sandbox és Live elkülönítése
+### 14.4 Sandbox és Live elkülönítése
 
 Fejlesztéshez kizárólag PayPal Sandbox-fiókot és Sandbox API URL-t használjatok. Live környezetre váltáskor nem elég csak az URL-t átírni: külön Live client ID/secret, HTTPS, webhook-ellenőrzés, monitoring és teljes fizetési ellenőrzés szükséges.
 
@@ -923,6 +952,15 @@ Fejlesztéshez kizárólag PayPal Sandbox-fiókot és Sandbox API URL-t használ
 
 A tesztek Node beépített test runnerrel futnak, és több helyen közvetlenül mockolják a Mongoose modellmetódusokat vagy PayPal service-t.
 
+A `npm run test:server` nem shell wildcardra támaszkodik. A `server/scripts/run-tests.js`:
+
+1. beolvassa a `server/__tests__` mappát;
+2. kiválasztja és név szerint rendezi a `.test.js` végű fájlokat;
+3. abszolút elérési utakkal elindítja a Node test runnert;
+4. változtatás nélkül továbbadja a tesztfolyamat kilépési kódját.
+
+Erre azért van szükség, mert a wildcardok és a könyvtár közvetlen átadása Node-verziótól, valamint Windows/Linux shelltől függően eltérően működhet. Az explicit fájllista Windows és Linux alatt is azonos viselkedést biztosít.
+
 ### 15.2 Parancsok
 
 ```bash
@@ -935,6 +973,15 @@ Interaktív frontend teszt:
 ```bash
 npm test --prefix client
 ```
+
+Tiszta telepítés reprodukálhatóságának ellenőrzése:
+
+```bash
+npm ci
+npm ci --prefix client
+```
+
+Az `npm ci` csak akkor sikeres, ha a `package.json` és a megfelelő `package-lock.json` szinkronban van. Dependency módosítása után mindig frissíteni és commitolni kell az érintett lock fájlt. A frontend önálló csomag; nem függhet a root alkalmazástól `file:..` dependency formájában.
 
 ### 15.3 Jelenlegi hiányosságok
 
@@ -1166,26 +1213,159 @@ A szerver egy quote objektumot adjon vissza lejárati idővel. A fizetés csak u
 
 ## 18. Fejlesztői indulási útmutató
 
-### 18.1 Előfeltételek
+### 18.1 Támogatott automatikus setup környezet
 
+Az automatizált setup elsődlegesen Windows fejlesztői gépre készült. Szükséges:
+
+- Windows 10 vagy Windows 11;
+- PowerShell 5.1 vagy újabb;
 - Git;
-- Node.js 18+ LTS;
-- npm;
-- elérhető MongoDB instance;
-- PayPal Developer Sandbox alkalmazás és két Sandbox tesztfiók.
+- Node.js 18 vagy újabb és a vele érkező npm;
+- internetkapcsolat az npm registryhez és szükség esetén a MongoDB letöltéséhez;
+- Windows Package Manager (`winget`) a MongoDB automatikus telepítéséhez;
+- olyan Windows-fiók, amely jóvá tudja hagyni a MongoDB telepítését és szolgáltatásindítását.
 
-### 18.2 Telepítés
+A PayPal Developer Sandbox alkalmazás nem szükséges a katalógus, auth, review és adminfunkciók helyi használatához. Fizetési teszthez külön Sandbox client ID, secret és tesztfiókok szükségesek.
 
-```bash
-npm install
-npm install --prefix client
+> A `scripts/setup-dev.ps1` Windows-specifikus: `node.exe`, `npm.cmd`, Windows service és `winget.exe` használatára épül. macOS vagy Linux alatt a manuális telepítési folyamatot kell követni.
+
+### 18.2 Ajánlott Windows telepítés
+
+Friss klónozás után PowerShellben:
+
+```powershell
+git clone https://github.com/3D-Garage/Techlines.git
+cd Techlines
+npm run setup:dev
 ```
 
-### 18.3 Helyi konfiguráció
+Az npm script a következő parancsot indítja:
 
-A repository gyökerében hozzatok létre saját `.env` fájlt a `README.md` mintája alapján. Ne osszátok meg egymással chaten a secreteket; mindkét fejlesztőnek lehet saját Sandbox-konfigurációja.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-dev.ps1
+```
 
-### 18.4 Indítás
+A `Bypass` csak az adott PowerShell-folyamatra vonatkozik; nem írja át tartósan a felhasználó vagy a gép execution policy beállítását.
+
+### 18.3 A setup működési folyamata
+
+```mermaid
+flowchart TD
+    A["npm run setup:dev"] --> B{"Node.js és npm elérhető?"}
+    B -- "Nem vagy Node < 18" --> B1["Leállás érthető hibaüzenettel"]
+    B -- Igen --> C{"Létezik .env?"}
+    C -- Nem --> C1["Véletlen JWT secret és adminjelszó generálása"]
+    C -- "Igen, -Force nélkül" --> C2["Meglévő .env megtartása"]
+    C -- "Igen, -Force kapcsolóval" --> C3["Backup, majd új .env generálása"]
+    C1 --> D{"MongoDB figyel a 127.0.0.1:27017 címen?"}
+    C2 --> D
+    C3 --> D
+    D -- Igen --> E["MongoDB használatra kész"]
+    D -- Nem --> F{"Létezik MongoDB Windows service?"}
+    F -- Igen --> F1["Service indítása és maximum 60 másodperc várakozás"]
+    F -- Nem --> G{"-SkipMongoInstall?"}
+    G -- Igen --> G1["Leállás: nincs futó MongoDB"]
+    G -- Nem --> G2["MongoDB Community Server telepítése wingettel"]
+    F1 --> E
+    G2 --> E
+    E --> H{"-SkipDependencies?"}
+    H -- Nem --> H1["npm ci a rootban, majd a kliensben"]
+    H -- Igen --> I{"-SkipSeed?"}
+    H1 --> I
+    I -- Nem --> I1["Collectionök, indexek, admin és mintatermékek seedelése"]
+    I -- Igen --> J["Setup kész"]
+    I1 --> J
+    J --> K["Indítás: npm run app"]
+```
+
+Lépésenkénti felelősségek:
+
+| Lépés | Mit ellenőriz vagy módosít? | Hibakezelés |
+|---|---|---|
+| Előfeltételek | megkeresi a `node.exe` és `npm.cmd` parancsot, ellenőrzi a Node főverzióját | Node 18 alatt vagy hiányzó npm esetén azonnal leáll |
+| `.env` | új helyi konfigurációt generál, vagy megtartja a meglévőt | `-Force` esetén előbb időbélyeges backup készül |
+| MongoDB port | egy másodperces TCP-próbát végez a `127.0.0.1:27017` címen | elérhető port esetén nem telepít és nem indít új példányt |
+| MongoDB service | megkeresi és szükség esetén elindítja a `MongoDB` Windows service-t | legfeljebb 60 másodpercig vár a portra |
+| MongoDB telepítés | `winget install --id MongoDB.Server` segítségével telepít | hibás exit code vagy hiányzó service esetén leáll |
+| Dependencyk | root és kliens oldalon determinisztikus `npm ci` fut | bármelyik lockhiba vagy npm-hiba megszakítja a setupot |
+| Seed | collectionöket, indexeket, helyi admint és mintatermékeket készít | hibás Mongo-kapcsolat vagy seedadat esetén nem jelez kész állapotot |
+| Befejezés | kiírja az indítási parancsot, admin e-mailt és új jelszó esetén a jelszót | a PayPal hiányzó konfigurációját külön jelzi |
+
+### 18.4 Setup kapcsolók
+
+| Kapcsoló | Hatás | Mikor használjuk? |
+|---|---|---|
+| `-Force` | backupolja a meglévő `.env` fájlt, majd új secreteket és adminjelszót generál | elveszett vagy kompromittált fejlesztői konfiguráció cseréjekor |
+| `-SkipMongoInstall` | megtiltja a MongoDB automatikus telepítését | ha a MongoDB-t kézzel, Dockerrel vagy más módon kezeljük; a 27017-es portnak már elérhetőnek kell lennie |
+| `-SkipDependencies` | kihagyja mindkét `npm ci` futtatását | ha a lock fájlok alapján már telepítve vannak a dependencyk |
+| `-SkipSeed` | kihagyja az admin és mintatermékek létrehozását | ha saját tesztadatbázist használunk, vagy nem akarjuk módosítani a jelenlegi adatokat |
+
+Kapcsoló átadása az npm scripten keresztül:
+
+```powershell
+npm run setup:dev -- -SkipSeed
+npm run setup:dev -- -SkipMongoInstall -SkipDependencies
+npm run setup:dev -- -Force
+```
+
+### 18.5 Seedelési logika
+
+A setup az `npm run seed` parancson keresztül a `server/scripts/seed.js` fájlt futtatja. A seed:
+
+1. betölti a `.env` konfigurációt;
+2. ellenőrzi a `MONGO_URI` és a legalább 6 karakteres `SEED_ADMIN_PASSWORD` meglétét;
+3. legfeljebb 10 másodperces szerverválasztási idővel csatlakozik a MongoDB-hez;
+4. inicializálja a User, Product és Order collectionöket és deklarált indexeiket;
+5. e-mail alapján létrehozza vagy frissíti a fejlesztői admint;
+6. biztosítja az admin `isAdmin: true` jogosultságát;
+7. név alapján, `upsert` művelettel létrehozza a három mintaterméket;
+8. minden esetben lezárja a Mongoose-kapcsolatot.
+
+A seed ismételhető: a már létező mintatermékeket nem duplikálja és nem írja felül. A helyi admin nevét, jelszavát és adminjogát viszont minden futtatás a `.env` aktuális seedértékeihez igazítja. Emiatt a `SEED_ADMIN_PASSWORD` megváltoztatása után a következő seed az admin jelszavát is megváltoztatja.
+
+### 18.6 A dependencyk reprodukálhatósága
+
+A setup szándékosan `npm ci`-t használ `npm install` helyett:
+
+```powershell
+npm.cmd ci
+npm.cmd ci --prefix client
+```
+
+Ennek következményei:
+
+- pontosan a lock fájlban rögzített dependencyfa települ;
+- a meglévő `node_modules` tartalma tisztán újraépül;
+- a setup hibával leáll, ha a `package.json` és `package-lock.json` eltér;
+- dependency módosításkor a fejlesztőnek az érintett lock fájlt is commitolnia kell;
+- a frontend dependencyfája különálló, ezért nem tartalmaz `techlines: file:..` hivatkozást a backend/root package-re.
+
+### 18.7 Manuális telepítés
+
+Ha nem Windows rendszeren dolgozunk, vagy nem akarjuk engedni az automatikus MongoDB-telepítést:
+
+1. Telepítsük és indítsuk el a MongoDB-t.
+2. Hozzuk létre a gyökér `.env` fájlt a `.env.example` alapján, valódi fejlesztői secretekkel.
+3. Telepítsük a dependencyket:
+
+   ```bash
+   npm ci
+   npm ci --prefix client
+   ```
+
+4. Hozzuk létre a fejlesztői adatokat:
+
+   ```bash
+   npm run seed
+   ```
+
+5. Indítsuk el az alkalmazást:
+
+   ```bash
+   npm run app
+   ```
+
+### 18.8 Alkalmazásindítás
 
 Backend és frontend együtt:
 
@@ -1204,20 +1384,46 @@ Alapértelmezett helyi címek:
 
 - React: `http://localhost:3000`
 - API: `http://localhost:5000`
+- MongoDB: `mongodb://127.0.0.1:27017/techlines`
 - a frontend fejlesztői proxy az `/api` hívásokat az 5000-es portra irányítja.
 
-### 18.5 Első ellenőrzés
+### 18.9 Első működési ellenőrzés
 
-1. A szerver logban jelenjen meg a MongoDB-kapcsolat.
-2. A `/api/products` adjon JSON-választ.
-3. Nyíljon meg a terméklista.
-4. Lehessen regisztrálni és belépni.
-5. Sandbox checkout előtt ellenőrizzétek a PayPal Sandbox URL-t és tesztkulcsokat.
-6. Futtassátok a backend teszteket és a production buildet.
+1. A setup végén jelenjen meg a `Development environment is ready` üzenet.
+2. A szerver logban jelenjen meg a MongoDB-kapcsolat és az 5000-es port.
+3. A `GET http://localhost:5000/api/products` adjon JSON-választ a mintatermékekkel.
+4. A `http://localhost:3000` oldalon nyíljon meg a React kliens.
+5. Lehessen a generált helyi adminnal bejelentkezni és megnyitni az Admin Console-t.
+6. Lehessen új vásárlót regisztrálni, terméket kosárba rakni és review-t írni.
+7. Futtassuk a backend teszteket és a production buildet:
 
-### 18.6 Admin létrehozása
+   ```powershell
+   npm run test:server
+   npm run build --prefix client
+   ```
 
-Az új user alapból nem admin. Fejlesztői környezetben a kiválasztott user MongoDB dokumentumában az `isAdmin` mezőt `true` értékre kell állítani, majd újra be kell jelentkezni vagy új API-kérést indítani. Élesben ehhez auditált, elkülönített admin-provisioning folyamat szükséges.
+8. PayPal checkout előtt töltsük ki a Sandbox client ID és secret értékét, majd indítsuk újra a szervert.
+
+### 18.10 Hibaelhárítás
+
+| Hiba vagy tünet | Valószínű ok | Megoldás |
+|---|---|---|
+| `Node.js 18 or newer is required` | Node hiányzik, nincs PATH-ban vagy túl régi | telepítsünk aktuális Node LTS-t, nyissunk új PowerShellt, ellenőrizzük a `node --version` és `npm --version` parancsot |
+| `winget is required` | hiányzik a Windows App Installer | telepítsük/frissítsük az App Installer alkalmazást, vagy telepítsük kézzel a MongoDB Community Servert |
+| `MongoDB did not start ... within 60 seconds` | a service nem indult el vagy a 27017-es port blokkolt | ellenőrizzük a Windows Services konzolt, a MongoDB logot és a portfoglalást, majd futtassuk újra a setupot |
+| `MongoDB was installed, but its Windows service could not be found` | a telepítés újraindítást igényel vagy más service-nevet használt | indítsuk újra a Windowst, ellenőrizzük a MongoDB szolgáltatást, majd futtassuk újra |
+| `Root dependency installation failed` | root package/lock eltérés vagy npm hálózati hiba | húzzuk le a legfrissebb branchet; dependency fejlesztésekor frissítsük és commitoljuk a root lock fájlt |
+| `Client dependency installation failed` | kliens package/lock eltérés | futtassuk fejlesztőként az `npm install --prefix client` parancsot, ellenőrizzük és commitoljuk a `client/package-lock.json` változását |
+| a régi `.env` marad használatban | a setup alapból megőrzi a konfigurációt | használjuk tudatosan a `-Force` kapcsolót; előtte/utána ellenőrizzük a létrejött backupot |
+| admin login nem működik | a `.env` jelszava és a legutóbbi seed nincs összhangban | futtassuk az `npm run seed` parancsot, majd a `.env` aktuális seed admin adataival lépjünk be |
+| PayPal unavailable / HTTP 503 | nincs Sandbox client ID beállítva | töltsük ki a két PayPal változót és indítsuk újra a szervert |
+| 3000-es vagy 5000-es port foglalt | másik folyamat használja | állítsuk le a másik folyamatot, vagy vezessünk be dokumentált egyedi portkonfigurációt |
+
+### 18.11 Admin létrehozása
+
+Az automatikus setup létrehoz egy `admin@3dgarage.local` fejlesztői adminfiókot, és a generált jelszót a futás végén egyszer kiírja. A jelszó a helyi `.env` `SEED_ADMIN_PASSWORD` mezőjében is megtalálható.
+
+Manuális setupnál az `.env` seed változóinak kitöltése után az `npm run seed` hozza létre az admint. Egy normál regisztrációval létrejött user alapból nem admin. Élesben a seedfiók nem használható; auditált, elkülönített admin-provisioning folyamat szükséges.
 
 ---
 
