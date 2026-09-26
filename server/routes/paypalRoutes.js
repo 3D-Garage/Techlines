@@ -23,9 +23,15 @@ export const __setPayPalService = (mock) => {
 // POST /api/paypal/create-order
 // Body: { items: [{ productId, qty }], shippingMethod }
 export const createPayPalOrderHandler = asyncHandler(async (req, res) => {
-  const { items = [], shippingMethod } = req.body || {};
+  const { items = [], shippingMethod, shippingAddress } = req.body || {};
   const quote = await calculateOrderPricing({ items, shippingMethod });
-  const created = await svc.createOrder({ total: quote.total, currency: quote.currency });
+  const created = await svc.createOrder({
+    total: quote.total,
+    currency: quote.currency,
+    items: quote.items,
+    shippingMethod: quote.shippingMethod,
+    shippingAddress,
+  });
   res.json({ id: created.id });
 });
 

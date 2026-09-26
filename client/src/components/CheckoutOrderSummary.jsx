@@ -13,7 +13,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { Link as ReactLink, useNavigate } from "react-router-dom";
 import { PhoneIcon, EmailIcon, ChatIcon } from "@chakra-ui/icons";
-import { createOrder, resetOrder } from "../redux/actions/orderAction";
+import { resetOrder } from "../redux/actions/orderAction";
 import { useEffect, useState } from "react";
 import CheckoutItem from "./CheckoutItem";
 import PayPalButton from "./PayPalButton";
@@ -84,37 +84,10 @@ const CheckoutOrderSummary = () => {
     setButtonDisabled(Boolean(error) || !shippingAddress || cart.length === 0 || !quote.total);
   }, [error, shippingAddress, cart.length, quote.total]);
 
-  const onPaymentSuccess = async (capture) => {
-    const paymentDetails = {
-      orderId: capture?.id,
-      payerId: capture?.payer?.payer_id,
-    };
-    const orderItems = cart.map((i) => ({
-      product_id: i.id,
-      name: i.name,
-      image: i.image,
-      price: i.price,
-      qty: i.qty,
-    }));
-    const payload = {
-      orderItems,
-      paymentMethod: "PayPal",
-      shippingMethod: quote.shippingMethod,
-      paymentDetails,
-    };
-    try {
-      await dispatch(createOrder(payload));
-      dispatch(resetCart());
-      dispatch(resetOrder());
-      navigate("/order-success");
-    } catch (_error) {
-      toast({
-        description: "The payment was captured, but the order could not be saved. Please contact support.",
-        status: "error",
-        duration: 12000,
-        isClosable: true,
-      });
-    }
+  const onPaymentSuccess = async () => {
+    dispatch(resetCart());
+    dispatch(resetOrder());
+    navigate("/order-success");
   };
 
   const onPaymentError = (e) => {

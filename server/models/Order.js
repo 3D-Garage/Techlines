@@ -28,6 +28,22 @@ const orderSchema = new mongoose.Schema(
       orderId: { type: String },
       payerId: { type: String },
     },
+    paypalOrderId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+    paypalCaptureId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+    paymentStatus: {
+      type: String,
+      default: "PENDING",
+    },
     shippingPrice: {
       type: Number,
       default: 0.0,
@@ -37,7 +53,7 @@ const orderSchema = new mongoose.Schema(
     isDelivered: { type: Boolean, required: true, default: false },
     deliveredAt: { type: Date },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Order = mongoose.model("Order", orderSchema);
