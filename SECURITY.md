@@ -61,34 +61,36 @@ This document describes the security measures currently implemented in the Techl
 
 - Orders and integrity of identity
 
-  - Server trusts identity from token, not client body
-    - File: `server/routes/orderRoutes.js`
-    - Ignores `userInfo` from the request body; derives `user`, `username`, `email` from `req.user` (populated by the middleware).
+  - Direct client-created orders are rejected. `POST /api/orders/confirm` accepts only a PayPal order ID.
+  - The authenticated user, item snapshots, address, shipping method, server price, and total are persisted in a `CheckoutSession` before PayPal order creation.
+  - Confirmation derives user identity from `req.user` and every order/payment field from the trusted checkout snapshot or verified PayPal response.
+  - PayPal order IDs, capture IDs, and checkout session IDs have enforced unique indexes.
 
 - PayPal payment flow (server-side)
 
   - Endpoints
     - File: `server/routes/paypalRoutes.js`
-    - `POST /api/paypal/create-order` (protected): computes total server-side (using DB prices) and creates a PayPal order via REST API.
-    - `POST /api/paypal/capture-order` (protected): performs server-side capture using REST API.
+    - `POST /api/paypal/create-order` (protected): validates products, quantities, availability, stock, address, and shipping method; computes the HUF total and stores a user-bound checkout snapshot.
+    - File: `server/routes/orderRoutes.js`
+    - `POST /api/orders/confirm` (protected): retrieves/captures PayPal, verifies ownership, status, capture ID, amount, and currency, then creates the order and decrements stock transactionally.
   - Service client
     - File: `server/services/paypalService.js`
-    - Retrieves access token and calls PayPal `create/capture` APIs using environment credentials (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, optional `PAYPAL_BASE_URL`).
+    - Retrieves access tokens and calls PayPal create/get/capture APIs with timeouts and stable `PayPal-Request-Id` values.
   - Server-side total calculation (prevents client tampering)
-    - `create-order` recalculates subtotal from product prices in DB + shipping, rounds in HUF, and sends that to PayPal.
+    - `create-order` calculates subtotal and shipping exclusively from database prices and server policy. Confirmation uses the immutable server snapshot.
 
 - Frontend changes to enforce server mediation
 
   - File: `client/src/components/PayPalButton.jsx`
-    - `createOrder`: calls server `POST /api/paypal/create-order` with `Authorization: Bearer <token>` and cart items.
-    - `onApprove`: calls server `POST /api/paypal/capture-order` with the PayPal `orderID`, then triggers app order creation.
+    - `createOrder`: sends only product IDs/quantities, address, and shipping method.
+    - `onApprove`: confirms with the PayPal order ID only; the browser never supplies payment or local-order fields.
   - File: `client/src/redux/actions/orderAction.js`
-    - Adds `Authorization: Bearer <token>` to `/api/orders` POST.
+    - Calls the authenticated `/api/orders/confirm` endpoint with only `paypalOrderId`.
 
 - Operational
   - `PORT` variable fixed (`server/index.js` uses `process.env.PORT`).
   - Tests for critical paths using Node’s built-in test runner: `npm run test:server`.
-    - Files: `server/__tests__/authMiddleware.test.js`, `server/__tests__/userRoutes.test.js`, `server/__tests__/orderRoutes.test.js`, `server/__tests__/paypalRoutes.test.js`.
+    - Database-backed checkout integration tests use a MongoDB replica set and PayPal Orders v2-shaped responses.
 
 ## Configuration and Secrets
 
@@ -103,15 +105,18 @@ This document describes the security measures currently implemented in the Techl
 
 - Auth middleware sets `req.user` on valid JWT and rejects missing/invalid tokens.
 - Login returns token; duplicate registration rejected.
-- Order creation uses `req.user` (token) rather than client-provided identity.
-- PayPal routes: server computes totals from DB; capture returns structured payload.
+- Forged direct order creation is rejected.
+- Amount/currency mismatch, incomplete capture, ownership mismatch, unavailable items, and insufficient stock create no order and do not decrement stock.
+- Sequential and concurrent confirmations create one order, make one capture call, and decrement stock once.
+- A completed capture can be recovered after a simulated local transaction failure.
 
 ## Remaining Risks and Considerations
 
 - Rate limiting is an in-memory stopgap and not distributed; use a production-ready limiter.
 - No comprehensive input validation schema yet (IDs, shapes, value ranges) — see TODO.
 - CSP header is not set; current headers reduce some risk but do not prevent all XSS vectors.
-- Server does not yet verify that stored order totals exactly match PayPal captured amounts; the flow is split between payment capture and DB order creation.
+- PayPal and MongoDB cannot share one distributed transaction. A durable confirmation claim and same-ID recovery handle ambiguous capture/commit failures; webhooks and reconciliation remain recommended for operational recovery.
+- MongoDB must be a replica set or sharded cluster for checkout transactions.
 - `client_id.js` tracked in VCS; comments must not include any credentials; prefer environment injection.
 
 ## TODO Roadmap (Prioritized)
@@ -125,9 +130,6 @@ High priority
   - Auth (email format, password policy)
   - Order payloads (ObjectId validation, qty ranges, shipping fields)
   - PayPal endpoints (items array schema, shippingPrice numeric bounds)
-- Move order creation fully server-side after PayPal capture:
-  - New endpoint: `POST /api/orders/confirm-from-capture` takes `orderID` only, recomputes totals from DB, fetches PayPal capture details, verifies amounts and status (`COMPLETED`), then persists the order (`paidAt`, `paymentDetails`).
-  - Reject if totals mismatch or capture is not completed.
 - Remove sensitive comments and decouple client PayPal ID:
   - Ensure `client/src/client_id.js` contains no sandbox credentials in comments.
   - Prefer build-time env injection for the PayPal client ID and ensure the file is not tracked or is generated.

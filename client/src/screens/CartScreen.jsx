@@ -15,8 +15,8 @@ import {
 } from "@chakra-ui/react";
 import { Link as ReactLink } from "react-router-dom";
 import { useSelector } from "react-redux";
-import CartItem from "../components/CartItem";
-import CartOrderSummary from "../components/CartOrderSummary";
+import CartItem from "../components/CartItem.jsx";
+import CartOrderSummary from "../components/CartOrderSummary.jsx";
 
 const CartScreen = () => {
   const cartInfo = useSelector((state) => state.cart);

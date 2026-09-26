@@ -1,18 +1,18 @@
 import { ChakraProvider } from "@chakra-ui/react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Navbar from "./components/Navbar";
-import ProductsScreen from "./screens/ProductsScreen";
-import CartScreen from "./screens/CartScreen";
-import ProductScreen from "./screens/ProductScreen";
-import Footer from "./components/Footer";
-import Home from "./screens/LandingScreen";
-import LoginScreen from "./screens/LoginScreen";
-import RegistraionScreen from "./screens/RegistraionScreen";
-import ProfileScreen from "./screens/ProfileScreen";
-import CheckOutScreen from "./screens/CheckOutScreen";
-import YourOrdersScreen from "./screens/YourOrdersScreen";
-import AdminConsoleScreen from "./screens/AdminConsoleScreen";
-import OrderSuccessScreen from "./screens/OrderSuccessScreen";
+import Navbar from "./components/Navbar.jsx";
+import ProductsScreen from "./screens/ProductsScreen.jsx";
+import CartScreen from "./screens/CartScreen.jsx";
+import ProductScreen from "./screens/ProductScreen.jsx";
+import Footer from "./components/Footer.jsx";
+import Home from "./screens/LandingScreen.jsx";
+import LoginScreen from "./screens/LoginScreen.jsx";
+import RegistraionScreen from "./screens/RegistraionScreen.jsx";
+import ProfileScreen from "./screens/ProfileScreen.jsx";
+import CheckOutScreen from "./screens/CheckOutScreen.jsx";
+import YourOrdersScreen from "./screens/YourOrdersScreen.jsx";
+import AdminConsoleScreen from "./screens/AdminConsoleScreen.jsx";
+import OrderSuccessScreen from "./screens/OrderSuccessScreen.jsx";
 
 function App() {
   return (

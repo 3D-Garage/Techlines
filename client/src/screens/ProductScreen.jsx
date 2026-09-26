@@ -28,8 +28,8 @@ import { MinusIcon, StarIcon, AddIcon } from "@chakra-ui/icons";
 import { BiPackage, BiCheckShield, BiSupport } from "react-icons/bi";
 import { CgSmileNone } from "react-icons/cg";
 import { useDispatch, useSelector } from "react-redux";
-import { createProductReview, getProduct, resetProductError } from "../redux/actions/productAction";
-import { addCartItem } from "../redux/actions/cartAction";
+import { createProductReview, getProduct, resetProductError } from "../redux/actions/productAction.js";
+import { addCartItem } from "../redux/actions/cartAction.js";
 import { useEffect, useState } from "react";
 
 const ProductScreen = () => {
@@ -71,7 +71,8 @@ const ProductScreen = () => {
     });
   };
 
-  const hasUserReviewed = () => Boolean(userInfo && product?.reviews?.some((review) => review.user === userInfo._id));
+  const hasUserReviewed = () =>
+    Boolean(userInfo && product?.reviews?.some((review) => review.user === userInfo._id));
 
   const submitReview = async () => {
     if (!comment.trim()) {
@@ -94,14 +95,7 @@ const ProductScreen = () => {
     <Wrap spacing="30px" justify="center" minHeight="100vh">
       {loading ? (
         <Stack direction="row" spacing={4}>
-          <Spinner
-            mt={20}
-            thickness="2px"
-            speed="0.65s"
-            emptyColor="gray.200"
-            color="puple.500"
-            size="xl"
-          />
+          <Spinner mt={20} thickness="2px" speed="0.65s" emptyColor="gray.200" color="puple.500" size="xl" />
         </Stack>
       ) : error ? (
         <Alert status="error">
@@ -130,10 +124,7 @@ const ProductScreen = () => {
             px={{ base: "4", md: "8", lg: "12" }}
             py={{ base: "6", md: "8", lg: "12" }}
           >
-            <Stack
-              direction={{ base: "column", lg: "row" }}
-              align={{ base: "flex-start" }}
-            >
+            <Stack direction={{ base: "column", lg: "row" }} align={{ base: "flex-start" }}>
               <Stack
                 pr={{ base: "0", md: "12" }}
                 spacing={{ base: "8", md: "4" }}
@@ -144,22 +135,12 @@ const ProductScreen = () => {
                 }}
               >
                 {product.productIsNew && (
-                  <Badge
-                    rounded="full"
-                    w="40px"
-                    fontSize="0.8em"
-                    colorScheme="green"
-                  >
+                  <Badge rounded="full" w="40px" fontSize="0.8em" colorScheme="green">
                     New
                   </Badge>
                 )}
                 {product.stock === 0 && (
-                  <Badge
-                    rounded="full"
-                    w="70px"
-                    fontSize="0.8em"
-                    colorScheme="red"
-                  >
+                  <Badge rounded="full" w="70px" fontSize="0.8em" colorScheme="red">
                     Sold out
                   </Badge>
                 )}
@@ -172,26 +153,10 @@ const ProductScreen = () => {
                     <Flex>
                       <HStack spacing={2}>
                         <StarIcon color={displayedRating >= 1 ? "purple.500" : "gray.300"} />
-                        <StarIcon
-                          color={
-                            displayedRating >= 2 ? "purple.500" : "gray.300"
-                          }
-                        />
-                        <StarIcon
-                          color={
-                            displayedRating >= 3 ? "purple.500" : "gray.300"
-                          }
-                        />
-                        <StarIcon
-                          color={
-                            displayedRating >= 4 ? "purple.500" : "gray.300"
-                          }
-                        />
-                        <StarIcon
-                          color={
-                            displayedRating >= 5 ? "purple.500" : "gray.300"
-                          }
-                        />
+                        <StarIcon color={displayedRating >= 2 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={displayedRating >= 3 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={displayedRating >= 4 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={displayedRating >= 5 ? "purple.500" : "gray.300"} />
                       </HStack>
                       <Text fontSize={"md"} fontWeight={"bold"} ml={"4px"}>
                         {product.numberOfReviews} Reviews
@@ -200,12 +165,7 @@ const ProductScreen = () => {
                   </Box>
                   <Text>{product.description}</Text>
                   <Text fontWeight={"bold"}>Quantity</Text>
-                  <Flex
-                    w={"170px"}
-                    p={"5px"}
-                    borderColor={"gray.200"}
-                    alignItems={"center"}
-                  >
+                  <Flex w={"170px"} p={"5px"} borderColor={"gray.200"} alignItems={"center"}>
                     <ButtonGroup size="sm" isAttached variant="outline">
                       <IconButton
                         borderColor={"purple.500"}
@@ -214,14 +174,8 @@ const ProductScreen = () => {
                         aria-label="Remove from amount"
                         icon={<MinusIcon />}
                       />
-                      <Square
-                        size="32px"
-                        border={"1px"}
-                        borderColor={"purple.500"}
-                      >
-                        <Text cursor={"default"}>
-                          {product.stock <= 0 ? "0" : amount}
-                        </Text>
+                      <Square size="32px" border={"1px"} borderColor={"purple.500"}>
+                        <Text cursor={"default"}>{product.stock <= 0 ? "0" : amount}</Text>
                       </Square>
                       <IconButton
                         borderColor={"purple.500"}
@@ -232,11 +186,7 @@ const ProductScreen = () => {
                       />
                     </ButtonGroup>
                   </Flex>
-                  <Button
-                    isDisabled={product.stock === 0}
-                    colorScheme="purple"
-                    onClick={() => addItem()}
-                  >
+                  <Button isDisabled={product.stock === 0} colorScheme="purple" onClick={() => addItem()}>
                     {(() => {
                       if (product.stock === 0) {
                         return "Sold out";
@@ -267,13 +217,7 @@ const ProductScreen = () => {
                   </Stack>
                 </Stack>
               </Stack>
-              <Flex
-                direction={"column"}
-                align={"center"}
-                flex={1}
-                _dark={{ bg: "gray.900" }}
-                pb={"30px"}
-              >
+              <Flex direction={"column"} align={"center"} flex={1} _dark={{ bg: "gray.900" }} pb={"30px"}>
                 <Image
                   src={product.image}
                   alt={product.name}
@@ -287,18 +231,42 @@ const ProductScreen = () => {
             {userInfo && (
               <Box my="8">
                 <Tooltip label={hasUserReviewed() ? "You have already reviewed this product." : ""}>
-                  <Button colorScheme="purple" isDisabled={hasUserReviewed()} onClick={() => setReviewBoxOpen((open) => !open)}>
+                  <Button
+                    colorScheme="purple"
+                    isDisabled={hasUserReviewed()}
+                    onClick={() => setReviewBoxOpen((open) => !open)}
+                  >
                     Write a review
                   </Button>
                 </Tooltip>
                 {reviewBoxOpen && (
                   <Stack mt="4" spacing="3">
-                    <HStack>{[1, 2, 3, 4, 5].map((value) => (
-                      <IconButton key={value} aria-label={`${value} stars`} variant="outline" onClick={() => setRating(value)} icon={<StarIcon color={rating >= value ? "purple.500" : "gray.300"} />} />
-                    ))}</HStack>
-                    <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Review title" focusBorderColor="purple.500" />
-                    <Textarea value={comment} onChange={(event) => setComment(event.target.value)} placeholder={`What do you think about ${product.name}?`} focusBorderColor="purple.500" />
-                    <Button alignSelf="flex-start" colorScheme="purple" onClick={submitReview}>Publish review</Button>
+                    <HStack>
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <IconButton
+                          key={value}
+                          aria-label={`${value} stars`}
+                          variant="outline"
+                          onClick={() => setRating(value)}
+                          icon={<StarIcon color={rating >= value ? "purple.500" : "gray.300"} />}
+                        />
+                      ))}
+                    </HStack>
+                    <Input
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      placeholder="Review title"
+                      focusBorderColor="purple.500"
+                    />
+                    <Textarea
+                      value={comment}
+                      onChange={(event) => setComment(event.target.value)}
+                      placeholder={`What do you think about ${product.name}?`}
+                      focusBorderColor="purple.500"
+                    />
+                    <Button alignSelf="flex-start" colorScheme="purple" onClick={submitReview}>
+                      Publish review
+                    </Button>
                   </Stack>
                 )}
               </Box>
@@ -308,27 +276,15 @@ const ProductScreen = () => {
                 Reviews
               </Text>
               {product.reviews.length ? (
-                <SimpleGrid
-                  minChildWidth="300px"
-                  spacingX="40px"
-                  spacingY="20px"
-                >
+                <SimpleGrid minChildWidth="300px" spacingX="40px" spacingY="20px">
                   {product.reviews.map((review) => (
                     <Box key={review._id}>
                       <Flex spacing="2px" alignItems={"center"}>
                         <StarIcon color={"purple.500"} />
-                        <StarIcon
-                          color={review.rating >= 2 ? "purple.500" : "gray.300"}
-                        />
-                        <StarIcon
-                          color={review.rating >= 3 ? "purple.500" : "gray.300"}
-                        />
-                        <StarIcon
-                          color={review.rating >= 4 ? "purple.500" : "gray.300"}
-                        />
-                        <StarIcon
-                          color={review.rating >= 5 ? "purple.500" : "gray.300"}
-                        />
+                        <StarIcon color={review.rating >= 2 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={review.rating >= 3 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={review.rating >= 4 ? "purple.500" : "gray.300"} />
+                        <StarIcon color={review.rating >= 5 ? "purple.500" : "gray.300"} />
                         <Text fontWeight={"semibold"} ml={"4px"}>
                           {review.title}
                         </Text>
@@ -336,8 +292,7 @@ const ProductScreen = () => {
                       <Box py="12px">{review.comment}</Box>
                       <Text fontSize={"sm"} color={"gray.400"}>
                         {" "}
-                        by {review.name},{" "}
-                        {new Date(review.createdAt).toDateString()}
+                        by {review.name}, {new Date(review.createdAt).toDateString()}
                       </Text>
                     </Box>
                   ))}

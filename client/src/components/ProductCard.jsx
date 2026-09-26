@@ -18,7 +18,7 @@ import { FiShoppingCart } from "react-icons/fi";
 import { Link as ReactLink } from "react-router-dom";
 import { StarIcon } from "@chakra-ui/icons";
 import { useDispatch, useSelector } from "react-redux";
-import { addCartItem } from "../redux/actions/cartAction";
+import { addCartItem } from "../redux/actions/cartAction.js";
 
 const Rating = ({ rating, numberOfReviews }) => {
   const iconSize = "14px";
@@ -111,7 +111,13 @@ const ProductCard = ({ product }) => {
             Ft
           </Box>
         </Box>
-        <Tooltip label={(product.stock <= 0) ? "Sold out" : "Add to cart"} bg={"white"} placement="top" color={"gray.800"} fontSize={"1.2em"}>
+        <Tooltip
+          label={product.stock <= 0 ? "Sold out" : "Add to cart"}
+          bg={"white"}
+          placement="top"
+          color={"gray.800"}
+          fontSize={"1.2em"}
+        >
           <Button
             variant={"ghost"}
             display={"flex"}

@@ -1,22 +1,27 @@
 import axios from "axios";
-import { setError, shippingAddressAdd, orderCreated, clearOrder, setLoading } from "../slices/order";
+import {
+  setError,
+  setShippingError,
+  shippingAddressAdd,
+  orderCreated,
+  clearOrder,
+  setLoading,
+} from "../slices/order.js";
 
 export const setShippingAdress = (data) => (dispatch) => {
   dispatch(shippingAddressAdd(data));
 };
 
 export const getShippingAddressError = (value) => (dispatch) => {
-  dispatch(setError(value));
+  dispatch(setShippingError(value));
 };
 
-export const createOrder = (order) => async (dispatch, getState) => {
+export const confirmOrder = (paypalOrderId) => async (dispatch, getState) => {
   dispatch(setLoading(true));
   const {
-    order: { shippingAddress },
     user: { userInfo },
   } = getState();
 
-  const prepareOrder = { ...order, shippingAddress };
   try {
     const config = {
       headers: {
@@ -24,7 +29,7 @@ export const createOrder = (order) => async (dispatch, getState) => {
         authorization: userInfo?.token ? `Bearer ${userInfo.token}` : undefined,
       },
     };
-    const { data } = await axios.post("/api/orders", prepareOrder, config);
+    const { data } = await axios.post("/api/orders/confirm", { orderID: paypalOrderId }, config);
     dispatch(orderCreated(data));
     return data;
   } catch (error) {

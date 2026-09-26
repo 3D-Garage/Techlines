@@ -19,9 +19,9 @@ import { Formik } from "formik";
 import * as Yup from "yup";
 import { useSelector, useDispatch } from "react-redux";
 import { useNavigate, Link as ReactLink, useLocation } from "react-router-dom";
-import PasswordTextField from "../components/PasswordTextField";
-import TextField from "../components/TextField";
-import { login } from "../redux/actions/userActions";
+import PasswordTextField from "../components/PasswordTextField.jsx";
+import TextField from "../components/TextField.jsx";
+import { login } from "../redux/actions/userActions.js";
 import { FaUser } from "react-icons/fa";
 
 //TODO: redefine password length

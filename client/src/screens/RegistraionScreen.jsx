@@ -14,14 +14,14 @@ import {
   AlertTitle,
   useToast,
 } from "@chakra-ui/react";
-import TextField from "../components/TextField";
-import PasswordTextField from "../components/PasswordTextField";
+import TextField from "../components/TextField.jsx";
+import PasswordTextField from "../components/PasswordTextField.jsx";
 import { useEffect } from "react";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, Link as ReactLink } from "react-router-dom";
-import { register } from "../redux/actions/userActions";
+import { register } from "../redux/actions/userActions.js";
 import { FaUserPlus } from "react-icons/fa";
 
 const RegistraionScreen = () => {

@@ -8,9 +8,16 @@ const connectToDatabase = async () => {
       useUnifiedTopology: true,
       useNewUrlParser: true,
     });
+    const hello = await mongoose.connection.db.admin().command({ hello: 1 });
+    if (!hello.setName && hello.msg !== "isdbgrid") {
+      throw new Error(
+        "MongoDB must be a replica set or sharded cluster because checkout confirmation uses transactions."
+      );
+    }
     console.log(`MongoDB Connected: ${connect.connection.host}`);
   } catch (error) {
     console.log(`Error: ${error.message}`);
+    throw error;
   }
 };
 

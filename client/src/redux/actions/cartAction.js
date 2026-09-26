@@ -6,7 +6,7 @@ import {
   cartItemRemoval,
   setExpressShipping,
   clearCart,
-} from "../slices/cart";
+} from "../slices/cart.js";
 
 export const addCartItem = (id, qty) => async (dispatch) => {
   dispatch(setLoading(true));
@@ -27,9 +27,9 @@ export const addCartItem = (id, qty) => async (dispatch) => {
         error.response && error.response.data.message
           ? error.response.data.message
           : error.message
-          ? error.message
-          : "An unexpected error has occured. Please try again later"
-      )
+            ? error.message
+            : "An unexpected error has occured. Please try again later",
+      ),
     );
   }
 };

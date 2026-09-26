@@ -6,11 +6,12 @@ const style = { layout: "vertical", color: "gold" };
 
 const ButtonWrapper = ({
   showSpinner,
-  total,
   onPaymentSuccess,
   onPaymentError,
+  onQuoteReceived,
   cart,
-  shippingPrice,
+  shippingAddress,
+  shippingMethod,
   token,
   disabled,
 }) => {
@@ -22,7 +23,11 @@ const ButtonWrapper = ({
       <PayPalButtons
         disabled={disabled}
         style={style}
-        forceReRender={[Math.round(total()), "HUF"]}
+        forceReRender={[
+          JSON.stringify(cart.map((item) => [item.id, Number(item.qty)])),
+          shippingMethod,
+          JSON.stringify(shippingAddress),
+        ]}
         fundingSource={undefined}
         createOrder={async () => {
           try {
@@ -33,36 +38,34 @@ const ButtonWrapper = ({
               headers,
               body: JSON.stringify({
                 items: cart.map((i) => ({ productId: i.id, qty: i.qty })),
-                shippingPrice: Math.round(shippingPrice),
+                shippingAddress,
+                shippingMethod,
               }),
             });
             const data = await res.json();
-            console.log("PayPal create-order status", res.status, data);
             if (!res.ok) throw new Error(data?.message || "Failed to create PayPal order");
-            console.log("PayPal order created", data?.id);
+            if (typeof onQuoteReceived === "function") {
+              onQuoteReceived({
+                subtotal: Number(data?.subtotal ?? data?.quote?.subtotal ?? 0),
+                shippingPrice: Number(data?.shippingPrice ?? data?.quote?.shippingPrice ?? 0),
+                totalPrice: Number(data?.totalPrice ?? data?.quote?.totalPrice ?? data?.total ?? 0),
+                currency: data?.currency ?? data?.quote?.currency ?? "HUF",
+              });
+            }
             return data.id;
           } catch (e) {
             console.error("PayPal create-order error", e);
             onPaymentError(e);
+            throw e;
           }
         }}
         onApprove={async function (data) {
           try {
-            console.log("PayPal onApprove orderID", data?.orderID);
-            const headers = { "Content-Type": "application/json" };
-            if (token) headers.Authorization = `Bearer ${token}`;
-            const res = await fetch("/api/paypal/capture-order", {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ orderID: data.orderID }),
-            });
-            const capture = await res.json();
-            console.log("PayPal capture status", res.status, capture);
-            if (!res.ok) throw new Error(capture?.message || "Failed to capture PayPal order");
-            onPaymentSuccess(capture);
+            await onPaymentSuccess(data.orderID);
           } catch (e) {
-            console.error("PayPal capture error", e);
+            console.error("PayPal confirmation error", e);
             onPaymentError(e);
+            throw e;
           }
         }}
         onError={(err) => {
@@ -74,7 +77,16 @@ const ButtonWrapper = ({
   );
 };
 
-const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingPrice, token, disabled }) => {
+const PayPalButton = ({
+  onPaymentSuccess,
+  onPaymentError,
+  onQuoteReceived,
+  cart,
+  shippingAddress,
+  shippingMethod,
+  token,
+  disabled,
+}) => {
   const [clientId, setClientId] = useState("");
   const [loadError, setLoadError] = useState("");
 
@@ -92,7 +104,13 @@ const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingP
     loadClientId();
   }, []);
 
-  if (loadError) return <Alert status="error" rounded="md"><AlertIcon />{loadError}</Alert>;
+  if (loadError)
+    return (
+      <Alert status="error" rounded="md">
+        <AlertIcon />
+        {loadError}
+      </Alert>
+    );
   if (!clientId) return <Spinner color="purple.500" alignSelf="center" />;
 
   return (
@@ -113,11 +131,12 @@ const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingP
       >
         <ButtonWrapper
           showSpinner={false}
-          total={total}
           onPaymentSuccess={onPaymentSuccess}
           onPaymentError={onPaymentError}
+          onQuoteReceived={onQuoteReceived}
           cart={cart}
-          shippingPrice={shippingPrice}
+          shippingAddress={shippingAddress}
+          shippingMethod={shippingMethod}
           token={token}
           disabled={disabled}
         />

@@ -8,7 +8,7 @@
     "client": "npm run start --prefix client",
     "server": "node server/index.js",
     "app": "concurrently \"npm run server\" \"npm run client\"",
-    "test:server": "node --test server/__tests__"
+    "test:server": "node --test \"server/__tests__/*.test.js\""
   },
   "repository": {
     "type": "git",
@@ -29,5 +29,8 @@
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^7.0.4",
     "react-scripts": "^5.0.1"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.4.1"
   }
 }

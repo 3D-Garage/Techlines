@@ -15,13 +15,13 @@ import {
   StackDivider,
   useToast,
 } from "@chakra-ui/react";
-import TextField from "../components/TextField";
-import PasswordTextField from "../components/PasswordTextField";
+import TextField from "../components/TextField.jsx";
+import PasswordTextField from "../components/PasswordTextField.jsx";
 import { useEffect } from "react";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { useDispatch, useSelector } from "react-redux";
-import { updateProfile, resetUpdateSuccess } from "../redux/actions/userActions";
+import { updateProfile, resetUpdateSuccess } from "../redux/actions/userActions.js";
 import { useLocation } from "react-router";
 import { Navigate } from "react-router-dom";
 

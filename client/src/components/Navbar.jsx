@@ -22,7 +22,7 @@ import { Link as ReactLink } from "react-router-dom";
 import { HamburgerIcon, CloseIcon, MoonIcon, SunIcon, ChevronDownIcon } from "@chakra-ui/icons";
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { logout } from "../redux/actions/userActions";
+import { logout } from "../redux/actions/userActions.js";
 import { MdLocalShipping, MdLogout, MdOutlineAdminPanelSettings } from "react-icons/md";
 import { CgProfile } from "react-icons/cg";
 import { FaUser } from "react-icons/fa";

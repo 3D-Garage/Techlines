@@ -9,7 +9,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 import { useDispatch } from "react-redux";
-import { addCartItem, removeCartitem } from "../redux/actions/cartAction";
+import { addCartItem, removeCartitem } from "../redux/actions/cartAction.js";
 
 const CartItem = ({ cartItem }) => {
   const { name, image, price, stock, qty, id } = cartItem;

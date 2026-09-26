@@ -7,7 +7,7 @@ import {
   updateUserProfile,
   resetUpdate,
   setUserOrders,
-} from "../slices/user";
+} from "../slices/user.js";
 
 export const login = (email, password) => async (dispatch) => {
   dispatch(setLoading(true));
@@ -25,8 +25,8 @@ export const login = (email, password) => async (dispatch) => {
       setError(
         error.response && error.response.data
           ? error.message
-          : "An unexpected error has occured. Please try again later"
-      )
+          : "An unexpected error has occured. Please try again later",
+      ),
     );
   }
 };
@@ -52,8 +52,8 @@ export const register = (name, email, password) => async (dispatch) => {
       setError(
         error.response && error.response.data
           ? error.message
-          : "An unexpected error has occured. Please try again later"
-      )
+          : "An unexpected error has occured. Please try again later",
+      ),
     );
   }
 };
@@ -77,8 +77,8 @@ export const updateProfile = (id, name, email, password) => async (dispatch, get
       setError(
         error.response && error.response.data
           ? error.message
-          : "An unexpected error has occured. Please try again later"
-      )
+          : "An unexpected error has occured. Please try again later",
+      ),
     );
   }
 };

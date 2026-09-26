@@ -25,7 +25,12 @@ const orderSchema = new mongoose.Schema(
       default: "PayPal",
     },
     paymentDetails: {
-      orderId: { type: String },
+      provider: { type: String, required: true, default: "PayPal" },
+      orderId: { type: String, required: true },
+      captureId: { type: String, required: true },
+      status: { type: String, required: true, enum: ["COMPLETED"] },
+      amount: { type: Number, required: true, min: 0 },
+      currency: { type: String, required: true },
       payerId: { type: String },
     },
     shippingPrice: {
@@ -33,11 +38,38 @@ const orderSchema = new mongoose.Schema(
       default: 0.0,
     },
     totalPrice: { type: Number, default: 0.0 },
-    paidAt: { type: Date },
+    paidAt: { type: Date, required: true },
+    checkoutSession: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      ref: "CheckoutSession",
+    },
     isDelivered: { type: Boolean, required: true, default: false },
     deliveredAt: { type: Date },
   },
   { timestamps: true }
+);
+
+orderSchema.index(
+  { "paymentDetails.orderId": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "paymentDetails.orderId": { $type: "string" } },
+  }
+);
+orderSchema.index(
+  { "paymentDetails.captureId": 1 },
+  {
+    unique: true,
+    partialFilterExpression: { "paymentDetails.captureId": { $type: "string" } },
+  }
+);
+orderSchema.index(
+  { checkoutSession: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { checkoutSession: { $type: "objectId" } },
+  }
 );
 
 const Order = mongoose.model("Order", orderSchema);

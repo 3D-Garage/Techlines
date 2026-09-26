@@ -25,11 +25,12 @@ A full-stack 3D-printing webshop built with React, Chakra UI, Redux Toolkit, Exp
 2. Create a root `.env` file:
 
    ```env
-   MONGO_URI=mongodb://127.0.0.1:27017/techlines
+   MONGO_URI=mongodb://127.0.0.1:27017/techlines?replicaSet=rs0
    TOKEN_SECRET=replace-with-a-long-random-secret
    PAYPAL_CLIENT_ID=your-paypal-sandbox-client-id
    PAYPAL_CLIENT_SECRET=your-paypal-sandbox-secret
    PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
+   PAYPAL_REQUEST_TIMEOUT_MS=10000
    PORT=5000
    ```
 
@@ -40,6 +41,20 @@ A full-stack 3D-printing webshop built with React, Chakra UI, Redux Toolkit, Exp
    ```
 
 The client runs on `http://localhost:3000` and proxies API requests to `http://localhost:5000`.
+
+Checkout confirmation uses MongoDB transactions, so MongoDB must run as a replica set (or a
+sharded cluster). For local development, start `mongod` with `--replSet rs0`, run
+`rs.initiate()` once in `mongosh`, and use the replica-set URI shown above. The API checks this
+capability and required payment uniqueness indexes before it starts accepting requests.
+
+## PayPal Sandbox verification
+
+Use Sandbox REST credentials in the environment variables above and sign in with a Sandbox
+buyer account from the checkout page. A successful approval calls only
+`POST /api/orders/confirm` with the PayPal order ID; the server retrieves/captures the payment,
+verifies its user binding, HUF amount and status, then creates the order and decrements stock in
+one MongoDB transaction. The automated suite uses PayPal's Orders v2 Sandbox response shape;
+the interactive buyer approval remains a credentialed Sandbox smoke test.
 
 ## Admin access
 

@@ -9,9 +9,9 @@ import {
   AlertTitle,
   AlertDescription,
 } from "@chakra-ui/react";
-import ProductCard from "../components/ProductCard";
+import ProductCard from "../components/ProductCard.jsx";
 import { useDispatch, useSelector } from "react-redux";
-import { getProducts } from "../redux/actions/productAction";
+import { getProducts } from "../redux/actions/productAction.js";
 import { useEffect } from "react";
 
 const ProductsScreen = () => {

@@ -6,7 +6,7 @@ import {
   setProduct,
   productReviewed,
   resetProductStatus,
-} from "../slices/products";
+} from "../slices/products.js";
 
 export const getProducts = () => async (dispatch) => {
   dispatch(setLoading(true));
@@ -19,9 +19,9 @@ export const getProducts = () => async (dispatch) => {
         error.response && error.response.data.message
           ? error.response.data.message
           : error.message
-          ? error.message
-          : "An unexpected error has occured. Please try again later."
-      )
+            ? error.message
+            : "An unexpected error has occured. Please try again later.",
+      ),
     );
   }
 };
@@ -37,9 +37,9 @@ export const getProduct = (id) => async (dispatch) => {
         error.response && error.response.data.message
           ? error.response.data.message
           : error.message
-          ? error.message
-          : "An unexpected error has occured. Please try again later."
-      )
+            ? error.message
+            : "An unexpected error has occured. Please try again later.",
+      ),
     );
   }
 };
@@ -51,7 +51,7 @@ export const createProductReview = (productId, comment, rating, title) => async 
     const { data } = await axios.post(
       `/api/products/reviews/${productId}`,
       { comment, rating, title },
-      { headers: { Authorization: `Bearer ${userInfo.token}` } }
+      { headers: { Authorization: `Bearer ${userInfo.token}` } },
     );
     dispatch(productReviewed(data));
     return data;

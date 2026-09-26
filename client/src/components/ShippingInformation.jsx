@@ -1,8 +1,20 @@
-import { Box, Flex, FormControl, FormLabel, Heading, Input, Radio, RadioGroup, Stack, Text, Tooltip } from "@chakra-ui/react";
+import {
+  Box,
+  Flex,
+  FormControl,
+  FormLabel,
+  Heading,
+  Input,
+  Radio,
+  RadioGroup,
+  Stack,
+  Text,
+  Tooltip,
+} from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
-import { setExpress } from "../redux/actions/cartAction";
-import { setShippingAdress, getShippingAddressError } from "../redux/actions/orderAction";
+import { setExpress } from "../redux/actions/cartAction.js";
+import { setShippingAdress, getShippingAddressError } from "../redux/actions/orderAction.js";
 
 const ShippingInformation = () => {
   const dispatch = useDispatch();
@@ -14,30 +26,57 @@ const ShippingInformation = () => {
     if (complete) dispatch(setShippingAdress(address));
   }, [address, dispatch]);
 
-  const update = (event) => setAddress((current) => ({ ...current, [event.target.name]: event.target.value }));
+  const update = (event) =>
+    setAddress((current) => ({ ...current, [event.target.name]: event.target.value }));
 
   return (
     <Stack spacing="8">
       <FormControl isRequired>
         <FormLabel>Street address</FormLabel>
-        <Input name="address" value={address.address} onChange={update} placeholder="Street and house number" focusBorderColor="purple.500" />
+        <Input
+          name="address"
+          value={address.address}
+          onChange={update}
+          placeholder="Street and house number"
+          focusBorderColor="purple.500"
+        />
       </FormControl>
       <Flex gap="4" direction={{ base: "column", sm: "row" }}>
         <FormControl isRequired>
           <FormLabel>Postal code</FormLabel>
-          <Input name="postalCode" value={address.postalCode} onChange={update} placeholder="Postal code" focusBorderColor="purple.500" />
+          <Input
+            name="postalCode"
+            value={address.postalCode}
+            onChange={update}
+            placeholder="Postal code"
+            focusBorderColor="purple.500"
+          />
         </FormControl>
         <FormControl isRequired>
           <FormLabel>City</FormLabel>
-          <Input name="city" value={address.city} onChange={update} placeholder="City" focusBorderColor="purple.500" />
+          <Input
+            name="city"
+            value={address.city}
+            onChange={update}
+            placeholder="City"
+            focusBorderColor="purple.500"
+          />
         </FormControl>
       </Flex>
       <FormControl isRequired>
         <FormLabel>Country</FormLabel>
-        <Input name="country" value={address.country} onChange={update} placeholder="Country" focusBorderColor="purple.500" />
+        <Input
+          name="country"
+          value={address.country}
+          onChange={update}
+          placeholder="Country"
+          focusBorderColor="purple.500"
+        />
       </FormControl>
       <Box>
-        <Heading fontSize="2xl" mb="5">Shipping Method</Heading>
+        <Heading fontSize="2xl" mb="5">
+          Shipping Method
+        </Heading>
         <RadioGroup defaultValue="false" onChange={(value) => dispatch(setExpress(value))}>
           <Stack direction={{ base: "column", md: "row" }} spacing="8">
             <Radio value="true" colorScheme="purple">
