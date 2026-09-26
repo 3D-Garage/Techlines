@@ -1,8 +1,8 @@
 import express from "express";
 import asyncHandler from "express-async-handler";
 import protectRoute from "../middleware/autMiddleware.js";
-import Product from "../models/Product.js";
 import * as paypalSvcImport from "../services/paypalService.js";
+import { calculateOrderPricing } from "../services/pricingService.js";
 
 const paypalRoutes = express.Router();
 
@@ -20,29 +20,12 @@ export const __setPayPalService = (mock) => {
   svc = mock;
 };
 
-// Computes total from items using DB prices
-async function computeTotalFromItems(items = []) {
-  let subtotal = 0;
-  for (const it of items) {
-    const product = await Product.findById(it.productId);
-    if (!product) throw new Error("Invalid product in order items");
-    const qty = Number(it.qty || 0);
-    subtotal += qty * Number(product.price);
-  }
-  return subtotal;
-}
-
 // POST /api/paypal/create-order
-// Body: { items: [{ productId, qty }], shippingPrice }
+// Body: { items: [{ productId, qty }], shippingMethod }
 export const createPayPalOrderHandler = asyncHandler(async (req, res) => {
-  const { items = [], shippingPrice = 0 } = req.body || {};
-  if (!Array.isArray(items) || items.length === 0) {
-    res.status(400);
-    throw new Error("No items provided");
-  }
-  const subtotal = await computeTotalFromItems(items);
-  const total = Math.round(Number(subtotal) + Number(shippingPrice)); // HUF integer
-  const created = await svc.createOrder({ total, currency: "HUF" });
+  const { items = [], shippingMethod } = req.body || {};
+  const quote = await calculateOrderPricing({ items, shippingMethod });
+  const created = await svc.createOrder({ total: quote.total, currency: quote.currency });
   res.json({ id: created.id });
 });
 
