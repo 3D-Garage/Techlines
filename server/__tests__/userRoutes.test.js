@@ -2,7 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import { loginUser, registerUser } from "../routes/userRoutes.js";
+import Order from "../models/Order.js";
+import {
+  loginUser,
+  registerUser,
+  updateUserProfile,
+  getUserOrders,
+  getUsers,
+  deleteUser,
+} from "../routes/userRoutes.js";
 
 process.env.TOKEN_SECRET = process.env.TOKEN_SECRET || "testsecret";
 
@@ -53,3 +61,99 @@ test("registerUser rejects duplicate email", async () => {
   assert.ok(res.nextErr instanceof Error);
 });
 
+test("registerUser creates a valid user and loginUser rejects bad credentials", async () => {
+  const createdUser = {
+    _id: "u3",
+    name: "New User",
+    email: "new@example.com",
+    isAdmin: false,
+    token: "jwt-token",
+    createdAt: new Date().toISOString(),
+  };
+
+  User.findOne = async ({ email }) => (email === "new@example.com" ? null : null);
+  User.create = async ({ name, email, password }) => ({
+    ...createdUser,
+    name,
+    email,
+    password,
+  });
+
+  const registerReq = mockReqRes({ name: "New User", email: "new@example.com", password: "secret123" });
+  await registerUser(registerReq.req, registerReq.res, registerReq.next);
+  assert.equal(registerReq.res.statusCode, 201);
+  assert.ok(registerReq.res.payload?.token);
+
+  const badLogin = mockReqRes({ email: "missing@example.com", password: "wrong" });
+  User.findOne = async () => null;
+  await loginUser(badLogin.req, badLogin.res, badLogin.next);
+  assert.equal(badLogin.res.statusCode, 401);
+});
+
+test("updateUserProfile, getUserOrders, getUsers, and deleteUser cover admin and ownership guardrails", async () => {
+  const user = {
+    _id: "u1",
+    name: "Old Name",
+    email: "old@example.com",
+    isAdmin: false,
+    save: async function () {
+      return this;
+    },
+  };
+
+  User.findById = async (id) => (id === "u1" ? user : null);
+  Order.find = () => ({
+    sort: async () => [{ _id: "o1", user: "u1" }],
+  });
+  User.find = () => ({
+    select: () => ({
+      sort: async () => [{ _id: "u1", email: "old@example.com" }],
+    }),
+  });
+  User.findByIdAndDelete = async (id) => (id === "u2" ? { _id: "u2" } : null);
+
+  const updateRes = {
+    statusCode: 200,
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(payload) {
+      this.payload = payload;
+      return this;
+    },
+  };
+  await updateUserProfile(
+    { params: { id: "u1" }, body: { name: "Fresh Name" }, user: { _id: "u1", isAdmin: false } },
+    updateRes,
+    null,
+  );
+  assert.equal(updateRes.payload.name, "Fresh Name");
+
+  const ordersRes = {
+    json(payload) {
+      this.payload = payload;
+      return this;
+    },
+  };
+  await getUserOrders({ params: { id: "u1" }, user: { _id: "u1", isAdmin: false } }, ordersRes, null);
+  assert.equal(ordersRes.payload.length, 1);
+
+  const usersRes = {
+    json(payload) {
+      this.payload = payload;
+      return this;
+    },
+  };
+  await getUsers({}, usersRes, null);
+  assert.equal(usersRes.payload.length, 1);
+
+  const deleteRes = {
+    json(payload) {
+      this.payload = payload;
+      return this;
+    },
+  };
+  await deleteUser({ params: { id: "u2" }, user: { _id: "u9", isAdmin: true } }, deleteRes, null);
+  assert.equal(deleteRes.payload._id, "u2");
+});

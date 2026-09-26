@@ -9,6 +9,7 @@
     "server": "node server/index.js",
     "app": "concurrently \"npm run server\" \"npm run client\"",
     "test:server": "node server/scripts/run-tests.js",
+    "test:server:coverage": "node --test --experimental-test-coverage server/__tests__/*.test.js",
     "seed": "node server/scripts/seed.js",
     "setup:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-dev.ps1"
   },
