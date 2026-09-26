@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import mongoose from "mongoose";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
-import { confirmOrder, createOrder, __resetPayPalService, __setPayPalService } from "../routes/orderRoutes.js";
+import {
+  confirmOrder,
+  createOrder,
+  __resetPayPalService,
+  __setPayPalService,
+} from "../routes/orderRoutes.js";
 
 const PRODUCT_ID = "507f1f77bcf86cd799439011";
 const DEFAULT_PRODUCT = {
@@ -51,7 +56,9 @@ const buildPayPalCapture = (overrides = {}) => ({
       },
       amount: { currency_code: "HUF", value: "2490.00" },
       payments: {
-        captures: [{ id: "CAPTURE_ID", amount: { currency_code: "HUF", value: "2490.00" }, status: "COMPLETED" }],
+        captures: [
+          { id: "CAPTURE_ID", amount: { currency_code: "HUF", value: "2490.00" }, status: "COMPLETED" },
+        ],
       },
     },
   ],
@@ -108,7 +115,10 @@ test("createOrder rejects client-paid payloads before saving a local order", asy
   };
   const res = makeRes();
 
-  await assert.rejects(() => createOrder(req, res, null), /Paid orders must be confirmed via \/api\/orders\/confirm\./);
+  await assert.rejects(
+    () => createOrder(req, res, null),
+    /Paid orders must be confirmed via \/api\/orders\/confirm\./,
+  );
   assert.equal(res.statusCode, 400);
 });
 
@@ -180,11 +190,20 @@ test("confirmOrder rejects payment that is not completed", async () => {
   Order.findOne = async () => null;
   __setPayPalService(
     buildPayPalService({
-      normalizePayPalCapture: () => ({ status: "PENDING", currency: "HUF", value: 2490, captureId: "CAPTURE_ID", payerId: "payer-123" }),
+      normalizePayPalCapture: () => ({
+        status: "PENDING",
+        currency: "HUF",
+        value: 2490,
+        captureId: "CAPTURE_ID",
+        payerId: "payer-123",
+      }),
     }),
   );
 
-  const req = { body: { orderID: "PAYPAL_ORDER_ID" }, user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" } };
+  const req = {
+    body: { orderID: "PAYPAL_ORDER_ID" },
+    user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" },
+  };
   const res = makeRes();
 
   await assert.rejects(() => confirmOrder(req, res, null), /PayPal payment is not completed\./);
@@ -198,11 +217,20 @@ test("confirmOrder rejects non-HUF currency", async () => {
   Order.findOne = async () => null;
   __setPayPalService(
     buildPayPalService({
-      normalizePayPalCapture: () => ({ status: "COMPLETED", currency: "USD", value: 2490, captureId: "CAPTURE_ID", payerId: "payer-123" }),
+      normalizePayPalCapture: () => ({
+        status: "COMPLETED",
+        currency: "USD",
+        value: 2490,
+        captureId: "CAPTURE_ID",
+        payerId: "payer-123",
+      }),
     }),
   );
 
-  const req = { body: { orderID: "PAYPAL_ORDER_ID" }, user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" } };
+  const req = {
+    body: { orderID: "PAYPAL_ORDER_ID" },
+    user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" },
+  };
   const res = makeRes();
 
   await assert.rejects(() => confirmOrder(req, res, null), /PayPal captured currency must be HUF\./);
@@ -216,14 +244,26 @@ test("confirmOrder rejects captured amount mismatch against server total", async
   Order.findOne = async () => null;
   __setPayPalService(
     buildPayPalService({
-      normalizePayPalCapture: () => ({ status: "COMPLETED", currency: "HUF", value: 1234, captureId: "CAPTURE_ID", payerId: "payer-123" }),
+      normalizePayPalCapture: () => ({
+        status: "COMPLETED",
+        currency: "HUF",
+        value: 1234,
+        captureId: "CAPTURE_ID",
+        payerId: "payer-123",
+      }),
     }),
   );
 
-  const req = { body: { orderID: "PAYPAL_ORDER_ID" }, user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" } };
+  const req = {
+    body: { orderID: "PAYPAL_ORDER_ID" },
+    user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" },
+  };
   const res = makeRes();
 
-  await assert.rejects(() => confirmOrder(req, res, null), /Captured amount does not match the server-calculated total\./);
+  await assert.rejects(
+    () => confirmOrder(req, res, null),
+    /Captured amount does not match the server-calculated total\./,
+  );
   assert.equal(res.statusCode, 422);
   __resetPayPalService();
 });
@@ -234,13 +274,25 @@ test("confirmOrder rejects PayPal lookup failures", async () => {
       throw new Error("PayPal order lookup failed");
     },
     captureOrder: async () => buildPayPalCapture(),
-    normalizePayPalCapture: () => ({ status: "COMPLETED", currency: "HUF", value: 2490, captureId: "CAPTURE_ID", payerId: "payer-123" }),
+    normalizePayPalCapture: () => ({
+      status: "COMPLETED",
+      currency: "HUF",
+      value: 2490,
+      captureId: "CAPTURE_ID",
+      payerId: "payer-123",
+    }),
   });
 
-  const req = { body: { orderID: "PAYPAL_ORDER_ID" }, user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" } };
+  const req = {
+    body: { orderID: "PAYPAL_ORDER_ID" },
+    user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" },
+  };
   const res = makeRes();
 
-  await assert.rejects(() => confirmOrder(req, res, null), /Unable to verify PayPal order\.|PayPal order lookup failed/);
+  await assert.rejects(
+    () => confirmOrder(req, res, null),
+    /Unable to verify PayPal order\.|PayPal order lookup failed/,
+  );
   assert.equal(res.statusCode, 400);
   __resetPayPalService();
 });
@@ -268,7 +320,10 @@ test("confirmOrder returns the existing order when the PayPal capture ID already
   };
   __setPayPalService(buildPayPalService());
 
-  const req = { body: { orderID: "PAYPAL_ORDER_ID" }, user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" } };
+  const req = {
+    body: { orderID: "PAYPAL_ORDER_ID" },
+    user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" },
+  };
   const res = makeRes();
 
   await confirmOrder(req, res, null);
@@ -285,7 +340,11 @@ test("confirmOrder is idempotent for repeated confirmation requests", async () =
   const originalSave = Order.prototype.save;
   Order.prototype.save = async function () {
     saveCalls += 1;
-    return { _id: "order-duplicate", paypalOrderId: this.paypalOrderId, paypalCaptureId: this.paypalCaptureId };
+    return {
+      _id: "order-duplicate",
+      paypalOrderId: this.paypalOrderId,
+      paypalCaptureId: this.paypalCaptureId,
+    };
   };
 
   let existingOrder = null;
@@ -303,7 +362,11 @@ test("confirmOrder is idempotent for repeated confirmation requests", async () =
     const secondRes = makeRes();
 
     await confirmOrder({ body: { orderID: "PAYPAL_ORDER_ID" }, user }, firstRes, null);
-    existingOrder = { _id: "order-duplicate", paypalOrderId: "PAYPAL_ORDER_ID", paypalCaptureId: "CAPTURE_ID" };
+    existingOrder = {
+      _id: "order-duplicate",
+      paypalOrderId: "PAYPAL_ORDER_ID",
+      paypalCaptureId: "CAPTURE_ID",
+    };
     await confirmOrder({ body: { orderID: "PAYPAL_ORDER_ID" }, user }, secondRes, null);
 
     assert.equal(firstRes.statusCode, 201);
@@ -342,7 +405,11 @@ test("confirmOrder does not decrement stock twice for repeated confirmation", as
 
   const originalSave = Order.prototype.save;
   Order.prototype.save = async function () {
-    return { _id: "order-duplicate", paypalOrderId: this.paypalOrderId, paypalCaptureId: this.paypalCaptureId };
+    return {
+      _id: "order-duplicate",
+      paypalOrderId: this.paypalOrderId,
+      paypalCaptureId: this.paypalCaptureId,
+    };
   };
   __setPayPalService(buildPayPalService());
 
@@ -352,7 +419,11 @@ test("confirmOrder does not decrement stock twice for repeated confirmation", as
     const secondRes = makeRes();
 
     await confirmOrder({ body: { orderID: "PAYPAL_ORDER_ID" }, user }, firstRes, null);
-    existingOrder = { _id: "order-duplicate", paypalOrderId: "PAYPAL_ORDER_ID", paypalCaptureId: "CAPTURE_ID" };
+    existingOrder = {
+      _id: "order-duplicate",
+      paypalOrderId: "PAYPAL_ORDER_ID",
+      paypalCaptureId: "CAPTURE_ID",
+    };
     await confirmOrder({ body: { orderID: "PAYPAL_ORDER_ID" }, user }, secondRes, null);
 
     assert.equal(decrementCount, 1);
@@ -383,11 +454,17 @@ test("confirmOrder rejects inventory conflicts before local order creation", asy
   Order.findOne = async () => null;
   __setPayPalService(buildPayPalService());
 
-  const req = { body: { orderID: "PAYPAL_ORDER_ID" }, user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" } };
+  const req = {
+    body: { orderID: "PAYPAL_ORDER_ID" },
+    user: { _id: PRODUCT_ID, name: "Good", email: "good@example.com" },
+  };
   const res = makeRes();
 
   try {
-    await assert.rejects(() => confirmOrder(req, res, null), /Requested quantity exceeds available stock|Insufficient stock/i);
+    await assert.rejects(
+      () => confirmOrder(req, res, null),
+      /Requested quantity exceeds available stock|Insufficient stock/i,
+    );
   } finally {
     if (originalReadyState) {
       Object.defineProperty(mongoose.connection, "readyState", originalReadyState);

@@ -288,7 +288,10 @@ const confirmOrder = asyncHandler(async (req, res) => {
         } catch (saveError) {
           if (saveError?.code === 11000) {
             const duplicateOrder = await Order.findOne({
-              $or: [{ paypalOrderId: normalizedPayPalOrderId }, { paypalCaptureId: normalizedPayment.captureId }],
+              $or: [
+                { paypalOrderId: normalizedPayPalOrderId },
+                { paypalCaptureId: normalizedPayment.captureId },
+              ],
             });
             if (duplicateOrder) {
               createdOrder = duplicateOrder;
@@ -323,7 +326,10 @@ const confirmOrder = asyncHandler(async (req, res) => {
       } catch (saveError) {
         if (saveError?.code === 11000) {
           const duplicateOrder = await Order.findOne({
-            $or: [{ paypalOrderId: normalizedPayPalOrderId }, { paypalCaptureId: normalizedPayment.captureId }],
+            $or: [
+              { paypalOrderId: normalizedPayPalOrderId },
+              { paypalCaptureId: normalizedPayment.captureId },
+            ],
           });
           if (duplicateOrder) {
             createdOrder = duplicateOrder;
