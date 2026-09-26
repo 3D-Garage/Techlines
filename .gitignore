@@ -16,6 +16,11 @@ node_modules/
 # testing
 /coverage
 /client/src/client_id.js
+
+# local-only tooling
+/tools/codegraph/P
+/.codegraph/
+
 # production
 /build
 /client/build/

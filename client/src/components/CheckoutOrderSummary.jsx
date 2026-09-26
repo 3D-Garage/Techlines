@@ -14,35 +14,75 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link as ReactLink, useNavigate } from "react-router-dom";
 import { PhoneIcon, EmailIcon, ChatIcon } from "@chakra-ui/icons";
 import { createOrder, resetOrder } from "../redux/actions/orderAction";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import CheckoutItem from "./CheckoutItem";
 import PayPalButton from "./PayPalButton";
 import { resetCart } from "../redux/actions/cartAction";
 const CheckoutOrderSummary = () => {
   const colorMode = mode("gray.600", "gray.400");
   const cartItems = useSelector((state) => state.cart);
-  const { cart, subtotal, expressShipping } = cartItems;
+  const { cart, expressShipping } = cartItems;
   const user = useSelector((state) => state.user);
   const { userInfo } = user;
   const shippingInfo = useSelector((state) => state.order);
   const { error, shippingAddress } = shippingInfo;
   const [buttonDisabled, setButtonDisabled] = useState(true);
+  const [quote, setQuote] = useState({
+    items: [],
+    subtotal: 0,
+    shippingMethod: expressShipping ? "express" : "standard",
+    shippingPrice: 0,
+    total: 0,
+    currency: "HUF",
+  });
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const toast = useToast();
 
-  const shipping = useCallback(
-    () => (expressShipping === "true" ? 3990 : subtotal < 10000 ? 1490 : 0),
-    [expressShipping, subtotal]
-  );
+  const shippingMethod = expressShipping ? "express" : "standard";
 
-  const total = useCallback(
-    () => Number(shipping() === 0 ? Number(subtotal) : Number(subtotal) + shipping()).toFixed(2),
-    [shipping, subtotal]
-  );
   useEffect(() => {
-    setButtonDisabled(Boolean(error) || !shippingAddress || cart.length === 0);
-  }, [error, shippingAddress, cart.length]);
+    let isMounted = true;
+
+    const fetchQuote = async () => {
+      if (!cart.length) {
+        setQuote({ items: [], subtotal: 0, shippingMethod, shippingPrice: 0, total: 0, currency: "HUF" });
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/checkout/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: cart.map((item) => ({ productId: item.id, qty: item.qty })),
+            shippingMethod,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.message || "Unable to calculate order quote");
+        if (isMounted) setQuote(data);
+      } catch (quoteError) {
+        if (isMounted) {
+          toast({
+            description: quoteError?.message || "Unable to calculate the latest order totals.",
+            status: "error",
+            duration: 5000,
+            isClosable: true,
+          });
+        }
+      }
+    };
+
+    fetchQuote();
+    return () => {
+      isMounted = false;
+    };
+  }, [cart, shippingMethod, toast]);
+
+  useEffect(() => {
+    setButtonDisabled(Boolean(error) || !shippingAddress || cart.length === 0 || !quote.total);
+  }, [error, shippingAddress, cart.length, quote.total]);
 
   const onPaymentSuccess = async (capture) => {
     const paymentDetails = {
@@ -59,8 +99,7 @@ const CheckoutOrderSummary = () => {
     const payload = {
       orderItems,
       paymentMethod: "PayPal",
-      shippingPrice: Math.round(shipping()),
-      totalPrice: Number(total()),
+      shippingMethod: quote.shippingMethod,
       paymentDetails,
     };
     try {
@@ -69,12 +108,21 @@ const CheckoutOrderSummary = () => {
       dispatch(resetOrder());
       navigate("/order-success");
     } catch (_error) {
-      toast({ description: "The payment was captured, but the order could not be saved. Please contact support.", status: "error", duration: 12000, isClosable: true });
+      toast({
+        description: "The payment was captured, but the order could not be saved. Please contact support.",
+        status: "error",
+        duration: 12000,
+        isClosable: true,
+      });
     }
   };
 
   const onPaymentError = (e) => {
-    toast({ description: e?.message || "The payment could not be completed.", status: "error", isClosable: true });
+    toast({
+      description: e?.message || "The payment could not be completed.",
+      status: "error",
+      isClosable: true,
+    });
   };
 
   return (
@@ -89,7 +137,7 @@ const CheckoutOrderSummary = () => {
             Subtotal
           </Text>
           <Text fontWeight="medium" color={colorMode}>
-            {Number(subtotal).toLocaleString("hu-HU")} Ft
+            {Number(quote.subtotal || 0).toLocaleString("hu-HU")} Ft
           </Text>
         </Flex>
         <Flex justify="space-between">
@@ -97,12 +145,12 @@ const CheckoutOrderSummary = () => {
             Shipping
           </Text>
           <Text fontWeight="medium" color={colorMode}>
-            {shipping() === 0 ? (
+            {quote.shippingPrice === 0 ? (
               <Badge rounded="full" px="2" fontSize="0.8em" colorScheme="green">
                 Free
               </Badge>
             ) : (
-              `${Number(shipping()).toLocaleString("hu-HU")} Ft`
+              `${Number(quote.shippingPrice || 0).toLocaleString("hu-HU")} Ft`
             )}
           </Text>
         </Flex>
@@ -111,15 +159,15 @@ const CheckoutOrderSummary = () => {
             Total
           </Text>
           <Text fontSize="xl" fontWeight="extrabold">
-            {Number(total()).toLocaleString("hu-HU")} Ft
+            {Number(quote.total || 0).toLocaleString("hu-HU")} Ft
           </Text>
         </Flex>
       </Stack>
       <Stack>
         <PayPalButton
-          total={total}
+          total={() => quote.total || 0}
           cart={cart}
-          shippingPrice={shipping()}
+          shippingMethod={shippingMethod}
           token={userInfo?.token}
           onPaymentSuccess={onPaymentSuccess}
           onPaymentError={onPaymentError}

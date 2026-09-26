@@ -7,7 +7,7 @@ A full-stack 3D-printing webshop built with React, Chakra UI, Redux Toolkit, Exp
 - product catalogue, product details and shopping cart
 - registration, login and editable customer profile
 - PayPal checkout with server-side order creation and capture
-- shipping address and standard/express delivery selection
+- shipping address and standard/express delivery select
 - product reviews (one review per customer and product)
 - customer order history
 - protected admin console for users, products, reviews and orders
@@ -72,5 +72,7 @@ New accounts are customers by default. Set the selected user's `isAdmin` field t
 npm run test:server
 npm run build --prefix client
 ```
+
 # techlines
+
 [![CodeScene Code Health](https://codescene.io/projects/39261/status-badges/code-health)](https://codescene.io/projects/39261)

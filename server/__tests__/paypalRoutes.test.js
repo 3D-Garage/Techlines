@@ -6,6 +6,8 @@ import paypalRoutes, {
   capturePayPalOrderHandler,
   getPayPalClientIdHandler,
 } from "../routes/paypalRoutes.js";
+import { createCheckoutQuoteHandler } from "../routes/checkoutRoutes.js";
+import { calculateOrderPricing } from "../services/pricingService.js";
 import Product from "../models/Product.js";
 
 function mockReqRes(body = {}, user = { _id: "u1" }) {
@@ -27,21 +29,244 @@ function mockReqRes(body = {}, user = { _id: "u1" }) {
   return { req, res, next };
 }
 
-test("createPayPalOrderHandler computes total from DB and returns id", async () => {
-  // stub products
-  Product.findById = async (id) => ({ _id: id, price: id === "p1" ? 100 : 200 });
-  // stub PayPal client
+const PRODUCT_ID_ONE = "507f1f77bcf86cd799439011";
+const PRODUCT_ID_TWO = "507f1f77bcf86cd799439012";
+
+test("standard shipping below 10,000 Ft adds 1,490 Ft", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 3490 });
+
+  const quote = await calculateOrderPricing({
+    items: [{ productId: PRODUCT_ID_ONE, qty: 2 }],
+    shippingMethod: "standard",
+  });
+
+  assert.deepEqual(quote, {
+    items: [
+      {
+        productId: PRODUCT_ID_ONE,
+        name: `Product ${PRODUCT_ID_ONE}`,
+        qty: 2,
+        unitPrice: 3490,
+        lineTotal: 6980,
+      },
+    ],
+    subtotal: 6980,
+    shippingMethod: "standard",
+    shippingPrice: 1490,
+    total: 8470,
+    currency: "HUF",
+  });
+});
+
+test("standard shipping at exactly 10,000 Ft is free", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 5000 });
+
+  const quote = await calculateOrderPricing({
+    items: [{ productId: PRODUCT_ID_ONE, qty: 2 }],
+    shippingMethod: "standard",
+  });
+
+  assert.equal(quote.shippingPrice, 0);
+  assert.equal(quote.total, 10000);
+});
+
+test("standard shipping above 10,000 Ft is free", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 6000 });
+
+  const quote = await calculateOrderPricing({
+    items: [{ productId: PRODUCT_ID_ONE, qty: 2 }],
+    shippingMethod: "standard",
+  });
+
+  assert.equal(quote.shippingPrice, 0);
+  assert.equal(quote.total, 12000);
+});
+
+test("express shipping always charges 3,990 Ft", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 1000 });
+
+  const quote = await calculateOrderPricing({
+    items: [{ productId: PRODUCT_ID_ONE, qty: 2 }],
+    shippingMethod: "express",
+  });
+
+  assert.equal(quote.shippingPrice, 3990);
+  assert.equal(quote.total, 5990);
+});
+
+test("unsupported shipping method is rejected", async () => {
+  await assert.rejects(
+    () =>
+      calculateOrderPricing({ items: [{ productId: PRODUCT_ID_ONE, qty: 1 }], shippingMethod: "priority" }),
+    /Unsupported shipping method/,
+  );
+});
+
+test("product price is read from the database and not trusted from cart state", async () => {
+  Product.findById = async () => ({ _id: PRODUCT_ID_ONE, name: "Updated", price: 2500 });
+
+  const quote = await calculateOrderPricing({
+    items: [{ productId: PRODUCT_ID_ONE, qty: 3 }],
+    shippingMethod: "standard",
+  });
+
+  assert.equal(quote.items[0].unitPrice, 2500);
+  assert.equal(quote.items[0].lineTotal, 7500);
+  assert.equal(quote.total, 8990);
+});
+
+test("client-supplied price is ignored", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 3490 });
+
+  const quote = await calculateOrderPricing({
+    items: [{ productId: PRODUCT_ID_ONE, qty: 2, unitPrice: 99999 }],
+    shippingMethod: "standard",
+  });
+
+  assert.equal(quote.items[0].unitPrice, 3490);
+  assert.equal(quote.items[0].lineTotal, 6980);
+});
+
+test("client-supplied shipping price is ignored", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 3000 });
+  let paypalTotal;
+
   __setPayPalService({
     createOrder: async ({ total }) => {
-      assert.equal(total, Math.round(100 * 2 + 200 * 1));
+      paypalTotal = total;
       return { id: "PAYPAL_ORDER_ID" };
     },
   });
-  const body = { items: [{ productId: "p1", qty: 2 }, { productId: "p2", qty: 1 }], shippingPrice: 0 };
+
+  const body = {
+    items: [{ productId: PRODUCT_ID_ONE, qty: 2 }],
+    shippingMethod: "standard",
+    shippingPrice: 999999,
+  };
   const { req, res, next } = mockReqRes(body);
   await createPayPalOrderHandler(req, res, next);
+
+  assert.equal(paypalTotal, 6000 + 1490);
+  assert.equal(res.payload.id, "PAYPAL_ORDER_ID");
+});
+
+test("multiple order items are priced and totaled together", async () => {
+  Product.findById = async (id) => ({
+    _id: id,
+    name: `Product ${id}`,
+    price: id === PRODUCT_ID_ONE ? 2000 : 1500,
+  });
+
+  const quote = await calculateOrderPricing({
+    items: [
+      { productId: PRODUCT_ID_ONE, qty: 2 },
+      { productId: PRODUCT_ID_TWO, qty: 3 },
+    ],
+    shippingMethod: "standard",
+  });
+
+  assert.equal(quote.subtotal, 8500);
+  assert.equal(quote.shippingPrice, 1490);
+  assert.equal(quote.total, 9990);
+});
+
+test("missing or invalid product is rejected", async () => {
+  Product.findById = async (id) =>
+    id === PRODUCT_ID_ONE ? null : { _id: id, name: `Product ${id}`, price: 1000 };
+  await assert.rejects(
+    () =>
+      calculateOrderPricing({ items: [{ productId: PRODUCT_ID_ONE, qty: 1 }], shippingMethod: "standard" }),
+    /product not found/i,
+  );
+  await assert.rejects(
+    () => calculateOrderPricing({ items: [{ productId: "bad-id", qty: 1 }], shippingMethod: "standard" }),
+    /invalid product id/i,
+  );
+});
+
+test("invalid quantity is rejected", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 2000 });
+
+  await assert.rejects(
+    () =>
+      calculateOrderPricing({ items: [{ productId: PRODUCT_ID_ONE, qty: 0 }], shippingMethod: "standard" }),
+    /quantity/i,
+  );
+  await assert.rejects(
+    () =>
+      calculateOrderPricing({ items: [{ productId: PRODUCT_ID_ONE, qty: -1 }], shippingMethod: "standard" }),
+    /quantity/i,
+  );
+  await assert.rejects(
+    () =>
+      calculateOrderPricing({ items: [{ productId: PRODUCT_ID_ONE, qty: 1.5 }], shippingMethod: "standard" }),
+    /quantity/i,
+  );
+});
+
+test("quote handler returns server-generated quote and ignores manipulated client values", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 3490 });
+
+  const { req, res, next } = mockReqRes({
+    items: [{ productId: PRODUCT_ID_ONE, qty: 2, unitPrice: 99999 }],
+    shippingMethod: "standard",
+    shippingPrice: 99999,
+    subtotal: 99999,
+    total: 99999,
+    currency: "USD",
+  });
+
+  await createCheckoutQuoteHandler(req, res, next);
+
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.payload, { id: "PAYPAL_ORDER_ID" });
+  assert.deepEqual(res.payload, {
+    items: [
+      {
+        productId: PRODUCT_ID_ONE,
+        name: `Product ${PRODUCT_ID_ONE}`,
+        qty: 2,
+        unitPrice: 3490,
+        lineTotal: 6980,
+      },
+    ],
+    subtotal: 6980,
+    shippingMethod: "standard",
+    shippingPrice: 1490,
+    total: 8470,
+    currency: "HUF",
+  });
+});
+
+test("quote total matches the amount used by PayPal order creation", async () => {
+  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 1200 });
+
+  const quote = await calculateOrderPricing({
+    items: [
+      { productId: PRODUCT_ID_ONE, qty: 2 },
+      { productId: PRODUCT_ID_TWO, qty: 1 },
+    ],
+    shippingMethod: "standard",
+  });
+
+  let totalUsedInPaypal = null;
+  __setPayPalService({
+    createOrder: async ({ total }) => {
+      totalUsedInPaypal = total;
+      return { id: "PAYPAL_ORDER_ID" };
+    },
+  });
+
+  const { req, res } = mockReqRes({
+    items: [
+      { productId: PRODUCT_ID_ONE, qty: 2 },
+      { productId: PRODUCT_ID_TWO, qty: 1 },
+    ],
+    shippingMethod: "standard",
+  });
+  await createPayPalOrderHandler(req, res, null);
+
+  assert.equal(totalUsedInPaypal, quote.total);
+  assert.equal(quote.total, 3600 + 1490);
 });
 
 test("capturePayPalOrderHandler returns capture payload", async () => {

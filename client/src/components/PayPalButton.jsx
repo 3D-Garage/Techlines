@@ -10,11 +10,12 @@ const ButtonWrapper = ({
   onPaymentSuccess,
   onPaymentError,
   cart,
-  shippingPrice,
+  shippingMethod,
   token,
   disabled,
 }) => {
   const [{ isPending }] = usePayPalScriptReducer();
+  const numericTotal = Number(typeof total === "function" ? total() : total || 0);
 
   return (
     <>
@@ -22,7 +23,7 @@ const ButtonWrapper = ({
       <PayPalButtons
         disabled={disabled}
         style={style}
-        forceReRender={[Math.round(total()), "HUF"]}
+        forceReRender={[Math.round(numericTotal), "HUF"]}
         fundingSource={undefined}
         createOrder={async () => {
           try {
@@ -33,7 +34,7 @@ const ButtonWrapper = ({
               headers,
               body: JSON.stringify({
                 items: cart.map((i) => ({ productId: i.id, qty: i.qty })),
-                shippingPrice: Math.round(shippingPrice),
+                shippingMethod,
               }),
             });
             const data = await res.json();
@@ -74,7 +75,7 @@ const ButtonWrapper = ({
   );
 };
 
-const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingPrice, token, disabled }) => {
+const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingMethod, token, disabled }) => {
   const [clientId, setClientId] = useState("");
   const [loadError, setLoadError] = useState("");
 
@@ -92,7 +93,13 @@ const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingP
     loadClientId();
   }, []);
 
-  if (loadError) return <Alert status="error" rounded="md"><AlertIcon />{loadError}</Alert>;
+  if (loadError)
+    return (
+      <Alert status="error" rounded="md">
+        <AlertIcon />
+        {loadError}
+      </Alert>
+    );
   if (!clientId) return <Spinner color="purple.500" alignSelf="center" />;
 
   return (
@@ -117,7 +124,7 @@ const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingP
           onPaymentSuccess={onPaymentSuccess}
           onPaymentError={onPaymentError}
           cart={cart}
-          shippingPrice={shippingPrice}
+          shippingMethod={shippingMethod}
           token={token}
           disabled={disabled}
         />
