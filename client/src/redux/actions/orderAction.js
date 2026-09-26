@@ -40,4 +40,32 @@ export const createOrder = (order) => async (dispatch, getState) => {
   }
 };
 
+export const confirmOrder = (orderID) => async (dispatch, getState) => {
+  dispatch(setLoading(true));
+  const {
+    user: { userInfo },
+  } = getState();
+  try {
+    const config = {
+      headers: {
+        "Content-Type": "application/json",
+        authorization: userInfo?.token ? `Bearer ${userInfo.token}` : undefined,
+      },
+    };
+    const { data } = await axios.post("/api/orders/confirm", { orderID }, config);
+    dispatch(orderCreated(data));
+    return data;
+  } catch (error) {
+    dispatch(
+      setError(
+        error.response?.data?.message ||
+          error.response?.data ||
+          error.message ||
+          "An unexpected error has occurred. Please try again later",
+      ),
+    );
+    throw error;
+  }
+};
+
 export const resetOrder = () => (dispatch) => dispatch(clearOrder());

@@ -52,17 +52,17 @@ const ButtonWrapper = ({
             console.log("PayPal onApprove orderID", data?.orderID);
             const headers = { "Content-Type": "application/json" };
             if (token) headers.Authorization = `Bearer ${token}`;
-            const res = await fetch("/api/paypal/capture-order", {
+            const res = await fetch("/api/orders/confirm", {
               method: "POST",
               headers,
               body: JSON.stringify({ orderID: data.orderID }),
             });
-            const capture = await res.json();
-            console.log("PayPal capture status", res.status, capture);
-            if (!res.ok) throw new Error(capture?.message || "Failed to capture PayPal order");
-            onPaymentSuccess(capture);
+            const order = await res.json();
+            console.log("Order confirmation status", res.status, order);
+            if (!res.ok) throw new Error(order?.message || "Failed to confirm PayPal order");
+            onPaymentSuccess(order);
           } catch (e) {
-            console.error("PayPal capture error", e);
+            console.error("PayPal confirmation error", e);
             onPaymentError(e);
           }
         }}
