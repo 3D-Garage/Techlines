@@ -60,6 +60,8 @@ The generated admin credentials are printed at the end and stored in the local `
    npm run app
    ```
 
+> Inventory updates and order creation are executed in MongoDB transactions. For local development and CI, use a replica-set-capable MongoDB deployment (for example, MongoDB Atlas or a local `mongod --replSet rs0` setup). A standalone single-node MongoDB instance can be used for basic app development, but it is not sufficient for transaction-based stock enforcement tests.
+
 The client runs on `http://localhost:3000` and proxies API requests to `http://localhost:5000`.
 
 ## Admin access
