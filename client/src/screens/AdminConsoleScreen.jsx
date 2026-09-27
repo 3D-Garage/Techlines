@@ -6,7 +6,7 @@ import {
 } from "@chakra-ui/react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Navigate, useLocation } from "react-router-dom";
+import { Link as ReactLink, Navigate, useLocation } from "react-router-dom";
 import { getProducts } from "../redux/actions/productAction";
 import {
   createAdminProduct, deleteAdminProduct, deleteOrder, deleteUser, getAllOrders, getAllUsers,
@@ -68,6 +68,7 @@ const AdminConsoleScreen = () => {
   return (
     <Box minH="100vh" maxW="8xl" mx="auto" px={{ base: 4, md: 8 }} py="10">
       <Heading fontSize="2xl" mb="6">3D Garage Admin Console</Heading>
+      <Button as={ReactLink} to="/admin/custom-orders" colorScheme="purple" mb="6">Egyedi megrendelések</Button>
       {error && <Alert status="error" mb="4"><AlertIcon />{error}</Alert>}
       {loading && <Spinner color="purple.500" mb="4" />}
       <Tabs colorScheme="purple" variant="enclosed" isLazy>

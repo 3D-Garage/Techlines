@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Product from "../models/Product.js";
 import User from "../models/User.js";
 import Order from "../models/Order.js";
+import CustomOrder from "../models/CustomOrder.js";
 
 dotenv.config();
 
@@ -55,7 +56,7 @@ const seed = async () => {
   await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10000 });
 
   // Create all application collections and declared indexes even when they are empty.
-  await Promise.all([User.init(), Product.init(), Order.init()]);
+  await Promise.all([User.init(), Product.init(), Order.init(), CustomOrder.init()]);
 
   let admin = await User.findOne({ email: adminEmail });
   if (!admin) {

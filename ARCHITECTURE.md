@@ -114,13 +114,13 @@ Az adminisztrátor saját adminfiókját az adminfelületről nem törölheti.
 | Terület | Technológia | Projektben deklarált verzió | Szerep |
 |---|---|---:|---|
 | Nyelv | JavaScript / JSX | ECMAScript modules a szerveren | Kliens- és szerveroldali fejlesztés |
-| Backend runtime | Node.js | nincs rögzítve; a natív `fetch` miatt legalább Node 18 javasolt | Express API és PayPal REST-hívások futtatása |
+| Backend runtime | Node.js | `engines.node >=20`; SMTP és natív `fetch` támogatás | Express API és PayPal REST-hívások futtatása |
 | Csomagkezelő | npm | lock fájlokkal | Függőségek és scriptek kezelése |
 | Fejlesztői automatizálás | Windows PowerShell | 5.1 vagy újabb | `.env`, MongoDB, dependencyk és seed előkészítése |
 | Windows csomagkezelő | winget | Windows App Installer része | MongoDB Community Server automatikus telepítése |
 | Adatcsere | JSON over HTTP | REST jellegű API | Böngésző–szerver kommunikáció |
 
-> A Node-verzió jelenleg nincs `engines`, `.nvmrc` vagy hasonló fájlban rögzítve. A `server/services/paypalService.js` globális `fetch` API-t használ, ezért a csapat számára célszerű Node 18 vagy újabb LTS-verziót szabványosítani.
+> A `package.json` `engines.node` mezője legalább Node 20-at ír elő az SMTP-függőséghez. A Windows setup ugyanezt ellenőrzi.
 
 ### 3.2 Frontend technológiák
 
@@ -1220,7 +1220,7 @@ Az automatizált setup elsődlegesen Windows fejlesztői gépre készült. Szük
 - Windows 10 vagy Windows 11;
 - PowerShell 5.1 vagy újabb;
 - Git;
-- Node.js 18 vagy újabb és a vele érkező npm;
+- Node.js 20 vagy újabb és a vele érkező npm;
 - internetkapcsolat az npm registryhez és szükség esetén a MongoDB letöltéséhez;
 - Windows Package Manager (`winget`) a MongoDB automatikus telepítéséhez;
 - olyan Windows-fiók, amely jóvá tudja hagyni a MongoDB telepítését és szolgáltatásindítását.
@@ -1252,7 +1252,7 @@ A `Bypass` csak az adott PowerShell-folyamatra vonatkozik; nem írja át tartós
 ```mermaid
 flowchart TD
     A["npm run setup:dev"] --> B{"Node.js és npm elérhető?"}
-    B -- "Nem vagy Node < 18" --> B1["Leállás érthető hibaüzenettel"]
+    B -- "Nem vagy Node < 20" --> B1["Leállás érthető hibaüzenettel"]
     B -- Igen --> C{"Létezik .env?"}
     C -- Nem --> C1["Véletlen JWT secret és adminjelszó generálása"]
     C -- "Igen, -Force nélkül" --> C2["Meglévő .env megtartása"]
@@ -1282,7 +1282,7 @@ Lépésenkénti felelősségek:
 
 | Lépés | Mit ellenőriz vagy módosít? | Hibakezelés |
 |---|---|---|
-| Előfeltételek | megkeresi a `node.exe` és `npm.cmd` parancsot, ellenőrzi a Node főverzióját | Node 18 alatt vagy hiányzó npm esetén azonnal leáll |
+| Előfeltételek | megkeresi a `node.exe` és `npm.cmd` parancsot, ellenőrzi a Node főverzióját | Node 20 alatt vagy hiányzó npm esetén azonnal leáll |
 | `.env` | új helyi konfigurációt generál, vagy megtartja a meglévőt | `-Force` esetén előbb időbélyeges backup készül |
 | MongoDB port | egy másodperces TCP-próbát végez a `127.0.0.1:27017` címen | elérhető port esetén nem telepít és nem indít új példányt |
 | MongoDB service | megkeresi és szükség esetén elindítja a `MongoDB` Windows service-t | legfeljebb 60 másodpercig vár a portra |
@@ -1408,7 +1408,7 @@ Alapértelmezett helyi címek:
 
 | Hiba vagy tünet | Valószínű ok | Megoldás |
 |---|---|---|
-| `Node.js 18 or newer is required` | Node hiányzik, nincs PATH-ban vagy túl régi | telepítsünk aktuális Node LTS-t, nyissunk új PowerShellt, ellenőrizzük a `node --version` és `npm --version` parancsot |
+| `Node.js 20 or newer is required` | Node hiányzik, nincs PATH-ban vagy túl régi | telepítsünk aktuális Node LTS-t, nyissunk új PowerShellt, ellenőrizzük a `node --version` és `npm --version` parancsot |
 | `winget is required` | hiányzik a Windows App Installer | telepítsük/frissítsük az App Installer alkalmazást, vagy telepítsük kézzel a MongoDB Community Servert |
 | `MongoDB did not start ... within 60 seconds` | a service nem indult el vagy a 27017-es port blokkolt | ellenőrizzük a Windows Services konzolt, a MongoDB logot és a portfoglalást, majd futtassuk újra a setupot |
 | `MongoDB was installed, but its Windows service could not be found` | a telepítés újraindítást igényel vagy más service-nevet használt | indítsuk újra a Windowst, ellenőrizzük a MongoDB szolgáltatást, majd futtassuk újra |

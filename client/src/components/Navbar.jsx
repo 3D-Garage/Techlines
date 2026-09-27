@@ -44,6 +44,7 @@ const ShoppingCartIcon = () => {
 
 const links = [
   { linkName: "Products", path: "/products" },
+  { linkName: "Egyedi megrendelés", path: "/custom-order" },
   { linkName: <ShoppingCartIcon />, path: "/cart" },
 ];
 
@@ -108,7 +109,7 @@ const Navbar = () => {
           </Link>
           <HStack as={"nav"} spacing={4} display={{ base: "none", md: "flex" }}>
             {links.map((link) => (
-              <NavLink key={link.linkName} path={link.path}>
+              <NavLink key={link.path} path={link.path}>
                 {link.linkName}
               </NavLink>
             ))}
@@ -178,7 +179,7 @@ const Navbar = () => {
         <Box pb={4} display={{ md: "none" }}>
           <Stack as={"nav"} spacing={4}>
             {links.map((link) => (
-              <NavLink key={link.linkName} path={link.path}>
+              <NavLink key={link.path} path={link.path}>
                 {link.linkName}
               </NavLink>
             ))}

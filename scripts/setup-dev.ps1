@@ -62,13 +62,13 @@ function Ensure-NodeJs {
   $node = Get-Command node.exe -ErrorAction SilentlyContinue
   $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
   if (-not $node -or -not $npm) {
-    throw "Node.js 18 or newer is required. Install the current Node.js LTS release, then run this setup again."
+    throw "Node.js 20 or newer is required. Install the current Node.js LTS release, then run this setup again."
   }
 
   $nodeVersion = (& $node.Source --version).TrimStart("v")
   $nodeMajor = [int]($nodeVersion.Split(".")[0])
-  if ($nodeMajor -lt 18) {
-    throw "Node.js 18 or newer is required. Current version: $nodeVersion."
+  if ($nodeMajor -lt 20) {
+    throw "Node.js 20 or newer is required. Current version: $nodeVersion."
   }
   Write-Host "Node.js $nodeVersion detected."
 }

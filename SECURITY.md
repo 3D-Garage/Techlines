@@ -10,6 +10,16 @@ This document describes the security measures currently implemented in the Techl
 
 ## Implemented Measures
 
+- Custom printing requests
+
+  - `server/routes/customOrderRoutes.js` requires admin authorization for listing, details, updates and file downloads. Public submissions are limited before multipart parsing to 10 per IP per 15 minutes.
+  - Request fields are allowlisted, type/length checked, and normalized as literal text. Admin-only fields cannot be assigned publicly. React escapes displayed text; notification messages have no HTML body or attachments.
+  - `server/middleware/customOrderUpload.js` accepts one STL/OBJ/STEP/STP model, checks format structure beyond the untrusted MIME/filename, limits bytes and multipart fields, and rejects executables and executable OBJ commands. This screening is not an antivirus or geometry validator.
+  - UUID filenames are written outside web roots with restrictive filesystem modes. Rejected requests remove their uploads. Only authenticated attachment downloads expose files; downloads validate stored filenames and reject symlinks/path traversal.
+  - Upload size and storage configuration are documented in `.env.example`. Persistent private storage must never be mounted by a static web server; Windows deployments should restrict its ACL to the application service account.
+  - Database persistence precedes notification. Failed email never deletes an accepted request; delivery state is visible to admins, and logs avoid contact details, credentials and internal exception messages.
+  - `server/__tests__/customOrder*.test.js` covers validation, upload screening and limits, unauthorized access, internal notes, rate limits, safe emails and failure retention.
+
 - Authentication and session integrity
 
   - JWT verification middleware with user loading

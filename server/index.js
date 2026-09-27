@@ -10,13 +10,13 @@ import userRoutes from "./routes/userRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import paypalRoutes from "./routes/paypalRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
+import customOrderRoutes from "./routes/customOrderRoutes.js";
+import { getCustomOrderConfig } from "./config/customOrders.js";
 
 dotenv.config();
+getCustomOrderConfig();
 connectToDatabase();
 const app = express();
-
-// Body parser with size limit
-app.use(express.json({ limit: "100kb" }));
 
 // Minimal security headers without external deps
 app.use((req, res, next) => {
@@ -31,7 +31,7 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   const allowedOrigin = process.env.CORS_ORIGIN || "*";
   res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
@@ -43,6 +43,10 @@ const ordersLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60 });
 
 app.use("/api/users/login", loginLimiter);
 app.use("/api/orders", ordersLimiter);
+
+// This router applies its submission limiter before parsing either JSON or multipart.
+app.use("/api/custom-orders", customOrderRoutes);
+app.use(express.json({ limit: "100kb" }));
 
 app.use("/api/products", productRoutes);
 app.use("/api/users", userRoutes);

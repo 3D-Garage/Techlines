@@ -4,6 +4,9 @@
   "description": "The backend for techlines",
   "main": "index.js",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "client": "npm run start --prefix client",
     "server": "node server/index.js",
@@ -31,6 +34,9 @@
     "express-async-handler": "^1.2.0",
     "jsonwebtoken": "^9.0.0",
     "mongoose": "^7.0.4",
-    "react-scripts": "^5.0.1"
+    "multer": "^2.4.0",
+    "nodemailer": "^10.0.10",
+    "react-scripts": "^5.0.1",
+    "validator": "^13.15.35"
   }
 }
