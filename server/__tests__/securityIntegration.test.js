@@ -511,6 +511,14 @@ test("PayPal confirmation rejects malformed IDs and amount mismatch before creat
       status: "COMPLETED",
       payer: { payer_id: "payer-id" },
       purchase_units: [{
+        custom_id: "standard",
+        items: [{
+          sku: PRODUCT_ID,
+          name: "Server Product",
+          quantity: 1,
+          unit_amount: { currency_code: "HUF", value: "1000" },
+        }],
+        shipping: { address: { country_code: "HU" } },
         payments: {
           captures: [{
             id: "CAPTURE_ID",
