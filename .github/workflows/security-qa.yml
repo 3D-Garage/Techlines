@@ -1,0 +1,36 @@
+name: Security QA
+
+on:
+  pull_request:
+  push:
+    branches: [master, qa/security-integration-suite]
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Unimplemented security gates and real regressions must fail this job.
+      - run: npm run test:server
+
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci --prefix client
+      - run: npm run test --prefix client -- --watchAll=false --runInBand CustomOrders.test.jsx
+        env:
+          CI: "true"

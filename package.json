@@ -16,6 +16,7 @@
     "test:browser": "playwright test",
     "test:foxpost:live": "node server/scripts/verify-foxpost-widget.js",
     "test:paypal:sandbox": "node server/scripts/verify-sandbox-checkout.js",
+    "test:server:security": "node server/scripts/run-tests.js --security",
     "test:server:coverage": "node --test --experimental-test-coverage server/__tests__/*.test.js",
     "seed": "node server/scripts/seed.js",
     "setup:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-dev.ps1"

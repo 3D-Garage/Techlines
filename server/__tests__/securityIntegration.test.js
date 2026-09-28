@@ -2,11 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 
 import { createApp } from "../app.js";
 import User from "../models/User.js";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
+import { normalizePayPalCapture } from "../services/paypalService.js";
 import {
   __setPayPalService as setPayPalRouteService,
   __resetPayPalService as resetPayPalRouteService,
@@ -247,28 +249,33 @@ test("duplicate registration and missing registration fields are rejected", asyn
   assert.equal(missing.status, 400);
 });
 
-test("NoSQL-style login payload cannot bypass authentication", async (t) => {
-  const originalFindOne = User.findOne;
-  User.findOne = async ({ email }) => {
-    // A secure outcome must never return an account for an operator-shaped credential.
-    if (typeof email !== "string") return null;
-    return null;
-  };
-  t.after(() => {
-    User.findOne = originalFindOne;
-  });
+for (const [label, credentials] of [
+  ["operator email", { email: { $ne: null }, password: "correct-password" }],
+  ["array email", { email: ["user@example.com"], password: "correct-password" }],
+  ["object password", { email: "user@example.com", password: { $ne: null } }],
+  ["array password", { email: "user@example.com", password: ["correct-password"] }],
+]) {
+  test(`login rejects ${label} before querying persistence`, async (t) => {
+    const account = new User({
+      ...authUser(),
+      password: await bcrypt.hash("correct-password", 4),
+    });
+    // Return a matching account even for a selector. Input validation belongs
+    // to the real route; neither the repository nor password check hides it.
+    const lookup = t.mock.method(User, "findOne", async () => account);
+    const baseUrl = await startApp(t);
+    const response = await fetch(`${baseUrl}/api/users/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(credentials),
+    });
+    const body = await response.json();
 
-  const baseUrl = await startApp(t);
-  const response = await fetch(`${baseUrl}/api/users/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: { $ne: null }, password: { $ne: null } }),
+    assert.equal(lookup.mock.callCount(), 0, "invalid credentials reached User.findOne");
+    assert.equal(response.status, 400);
+    assert.equal(body.token, undefined);
   });
-  const body = await response.json();
-
-  assert.equal(response.status, 401);
-  assert.equal(body.token, undefined);
-});
+}
 
 test("login brute-force threshold returns 429 after the configured limit", async (t) => {
   const originalFindOne = User.findOne;
@@ -314,6 +321,7 @@ test("order creation derives identity and prices from trusted server state", asy
   const originalSave = Order.prototype.save;
   let savedOrder;
   Order.prototype.save = async function () {
+    await this.validate();
     savedOrder = {
       user: String(this.user),
       username: this.username,
@@ -344,7 +352,7 @@ test("order creation derives identity and prices from trusted server state", asy
       user: OTHER_USER_ID,
       username: "Forged Name",
       email: "forged@example.com",
-      orderItems: [{ productId: PRODUCT_ID, qty: 1, price: 1, name: "Forged Product" }],
+      orderItems: [{ productId: PRODUCT_ID, qty: 1, price: 1, name: "Forged Product", image: "/images/product.jpg" }],
       shippingAddress: {
         address: "Main St. 1",
         city: "Budapest",
@@ -528,13 +536,7 @@ test("PayPal confirmation rejects malformed IDs and amount mismatch before creat
         },
       }],
     }),
-    normalizePayPalCapture: () => ({
-      status: "COMPLETED",
-      currency: "HUF",
-      value: 1,
-      captureId: "CAPTURE_ID",
-      payerId: "payer-id",
-    }),
+    normalizePayPalCapture,
   });
   t.after(() => resetOrderPayPalService());
 
