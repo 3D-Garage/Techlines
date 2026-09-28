@@ -7,6 +7,7 @@ import userRoutes from "./routes/userRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import paypalRoutes from "./routes/paypalRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
+import shippingRoutes from "./routes/shippingRoutes.js";
 import customOrderRoutes from "./routes/customOrderRoutes.js";
 
 export function createApp() {
@@ -43,6 +44,7 @@ export function createApp() {
   app.use("/api/users", userRoutes);
   app.use("/api/orders", orderRoutes);
   app.use("/api/checkout", checkoutRoutes);
+  app.use("/api/shipping", shippingRoutes);
   app.use("/api/paypal", paypalRoutes);
 
   app.use(notFound);
