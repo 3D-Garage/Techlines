@@ -8,6 +8,7 @@ export const getPayPalClientIdHandler = (_req, res) => {
   if (!process.env.PAYPAL_CLIENT_ID) return res.status(503).json({ message: "PayPal is not configured." });
   return res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
 };
+export const __resetPayPalService = () => __setPayPalService(null);
 export const createPayPalOrderHandler = asyncHandler(async (req, res) => {
   const attempt = await createCheckout(req.user, req.body);
   const status = ["FAILED", "EXPIRED", "REVIEW"].includes(attempt.status) ? 409 : attempt.paypalOrderId ? 200 : 202;
