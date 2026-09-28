@@ -17,7 +17,11 @@ export const getPayPalClientIdHandler = (_req, res) => {
 // indirection to allow mocking in tests
 let svc = paypalSvcImport;
 export const __setPayPalService = (mock) => {
-  svc = mock;
+  svc = mock || paypalSvcImport;
+};
+
+export const __resetPayPalService = () => {
+  svc = paypalSvcImport;
 };
 
 // POST /api/paypal/create-order
