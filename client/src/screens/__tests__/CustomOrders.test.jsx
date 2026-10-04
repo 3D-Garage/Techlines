@@ -11,7 +11,7 @@ import AdminCustomOrdersScreen from "../AdminCustomOrdersScreen";
 
 jest.mock("axios", () => ({ get: jest.fn(), post: jest.fn(), patch: jest.fn() }));
 
-const config = { maxFileSizeBytes: 1024, supportedExtensions: [".stl", ".obj", ".step", ".stp"] };
+const config = { maxFileSizeBytes: 1024, supportedExtensions: [".stl", ".obj", ".step", ".stp"], fileRetentionDays: 30 };
 const order = {
   _id: "order-123", customerName: "Teszt Elek", customerEmail: "elek@example.com", customerPhone: "+36 30 123 4567",
   description: "<img src=x onerror=alert(1)>\nAlkatrész", status: "new", adminNotes: "",
@@ -82,6 +82,63 @@ test("supports a file-only request with no description", async () => {
   expect(axios.post.mock.calls[0][1].has("description")).toBe(false);
 });
 
+test("displays the configured file retention period before uploading", async () => {
+  axios.get.mockResolvedValue({ data: { ...config, fileRetentionDays: 14 } });
+  renderCustomer();
+  expect(await screen.findByText(/A feltöltött modellfájlt 14 napig őrizzük meg, majd automatikusan töröljük/)).toBeInTheDocument();
+});
+
+test("accepts legacy upload configuration without promising an unreported retention period", async () => {
+  axios.get.mockResolvedValue({ data: { maxFileSizeBytes: config.maxFileSizeBytes, supportedExtensions: config.supportedExtensions } });
+  renderCustomer();
+  fillContact();
+  const input = screen.getByLabelText("3D modellfájl");
+  await waitFor(() => expect(input).toBeEnabled());
+  expect(screen.queryByText(/A feltöltési beállítások nem tölthetők be/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/napig őrizzük meg/)).not.toBeInTheDocument();
+  fireEvent.change(input, { target: { files: [new File(["x".repeat(config.maxFileSizeBytes + 1)], "model.stl")] } });
+  submit();
+  expect(await screen.findByText(/A fájl legfeljebb/)).toBeInTheDocument();
+  expect(axios.post).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { files: [new File(["solid model\nendsolid model"], "model.stl")] } });
+  submit();
+  expect(await screen.findByText("order-123")).toBeInTheDocument();
+  expect(axios.post.mock.calls[0][1].get("modelFile").name).toBe("model.stl");
+});
+
+test.each([
+  ["missing size limit", { supportedExtensions: config.supportedExtensions }],
+  ["zero size limit", { ...config, maxFileSizeBytes: 0 }],
+  ["negative size limit", { ...config, maxFileSizeBytes: -1 }],
+  ["non-numeric size limit", { ...config, maxFileSizeBytes: "1024" }],
+  ["non-array extensions", { ...config, supportedExtensions: ".stl" }],
+  ["null retention", { ...config, fileRetentionDays: null }],
+  ["zero retention", { ...config, fileRetentionDays: 0 }],
+  ["non-numeric retention", { ...config, fileRetentionDays: "30" }],
+])("still disables uploads for malformed configuration: %s", async (_label, data) => {
+  axios.get.mockResolvedValue({ data });
+  renderCustomer();
+  expect(await screen.findByText(/A feltöltési beállítások nem tölthetők be/)).toBeInTheDocument();
+  expect(screen.getByLabelText("3D modellfájl")).toBeDisabled();
+});
+
+test("keeps request details after storage is full and allows retrying without the file", async () => {
+  axios.post.mockRejectedValueOnce({ response: { status: 503, data: { message: "A feltöltési tárhely megtelt. Fájl nélkül is elküldheted a kérésed." } } });
+  renderCustomer();
+  fillContact();
+  fireEvent.change(screen.getByLabelText("Projekt leírása"), { target: { value: "Alkatrész" } });
+  const input = screen.getByLabelText("3D modellfájl");
+  await waitFor(() => expect(input).toBeEnabled());
+  fireEvent.change(input, { target: { files: [new File(["solid model\nendsolid model"], "model.stl")] } });
+  submit();
+  expect(await screen.findByText(/A feltöltési tárhely megtelt/)).toBeInTheDocument();
+  expect(screen.getByLabelText("Projekt leírása")).toHaveValue("Alkatrész");
+  fireEvent.click(screen.getByRole("button", { name: "Csatolmány eltávolítása" }));
+  submit();
+  expect(await screen.findByText("order-123")).toBeInTheDocument();
+  expect(axios.post.mock.calls[1][1].has("modelFile")).toBe(false);
+});
+
 test("rejects unsupported and oversized attachments using configured limits", async () => {
   renderCustomer();
   fillContact();
@@ -133,6 +190,33 @@ test("continues to allow text requests if upload configuration fails", async () 
   fireEvent.change(screen.getByLabelText("Projekt leírása"), { target: { value: "Alkatrész" } });
   submit();
   expect(await screen.findByText("order-123")).toBeInTheDocument();
+});
+
+test.each([
+  ["current", config],
+  ["legacy", { maxFileSizeBytes: config.maxFileSizeBytes, supportedExtensions: config.supportedExtensions }],
+])("recovers from a failed configuration load with %s settings and preserves form values", async (_label, data) => {
+  axios.get.mockRejectedValueOnce(new Error("Temporary network failure")).mockResolvedValueOnce({ data });
+  renderCustomer();
+  expect(await screen.findByText(/A feltöltési beállítások nem tölthetők be/)).toBeInTheDocument();
+  const input = screen.getByLabelText("3D modellfájl");
+  expect(input).toBeDisabled();
+  fillContact();
+  fireEvent.change(screen.getByLabelText("Projekt leírása"), { target: { value: "Megőrzendő leírás" } });
+  fireEvent.click(screen.getByRole("button", { name: "Beállítások újratöltése" }));
+  await waitFor(() => expect(input).toBeEnabled());
+  expect(screen.queryByText(/A feltöltési beállítások nem tölthetők be/)).not.toBeInTheDocument();
+  expect(screen.getByLabelText(/^Név/)).toHaveValue(" Teszt Elek ");
+  expect(screen.getByLabelText("Projekt leírása")).toHaveValue("Megőrzendő leírás");
+  expect(axios.get).toHaveBeenCalledTimes(2);
+  expect(axios.get.mock.calls.every(([url]) => url === "/api/custom-orders/config")).toBe(true);
+  fireEvent.change(input, { target: { files: [new File(["solid model\nendsolid model"], "model.stl")] } });
+  submit();
+  expect(await screen.findByText("order-123")).toBeInTheDocument();
+  const body = axios.post.mock.calls[0][1];
+  expect(body.get("customerName")).toBe("Teszt Elek");
+  expect(body.get("description")).toBe("Megőrzendő leírás");
+  expect(body.get("modelFile").name).toBe("model.stl");
 });
 
 test.each([null, { isAdmin: false, token: "customer-token" }])("blocks non-admin detail access without making requests (%j)", (userInfo) => {
@@ -190,4 +274,63 @@ test("downloads attached models with the administrator bearer token", async () =
   await waitFor(() => expect(axios.get).toHaveBeenLastCalledWith("/api/custom-orders/order-123/file", { headers: { Authorization: "Bearer admin-token" }, responseType: "blob" }));
   await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
   click.mockRestore();
+});
+
+test("retains attachment metadata but disables expired model downloads", async () => {
+  const expiresAt = "2026-09-27T12:00:00Z";
+  axios.get.mockResolvedValue({ data: { ...order, modelFile: { originalName: "old-model.stl", extension: ".stl", size: 123, mimeType: "model/stl", expiresAt, expired: true } } });
+  renderAdmin();
+  expect(await screen.findByText("old-model.stl")).toBeInTheDocument();
+  expect(screen.getByText(`Megőrzési határidő: ${new Date(expiresAt).toLocaleString("hu-HU")}`)).toBeInTheDocument();
+  expect(screen.getByText(/A modellfájl megőrzési ideje lejárt/)).toBeInTheDocument();
+  const button = screen.getByRole("button", { name: "Modellfájl letöltése" });
+  expect(button).toBeDisabled();
+  fireEvent.click(button);
+  expect(axios.get).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  ["missing", JSON.stringify({ code: "CUSTOM_ORDER_FILE_MISSING" })],
+  ["expired", JSON.stringify({ code: "CUSTOM_ORDER_FILE_EXPIRED" })],
+  ["legacy", "Expired"],
+])("disables stale downloads after a %s 410 response without assuming why the file is unavailable", async (_reason, body) => {
+  axios.get.mockResolvedValueOnce({ data: { ...order, modelFile: { originalName: "model.stl", extension: ".stl", size: 123, mimeType: "model/stl", expired: false } } })
+    .mockRejectedValueOnce({ response: { status: 410, data: new Blob([body]) } });
+  renderAdmin();
+  const download = await screen.findByRole("button", { name: "Modellfájl letöltése" });
+  fireEvent.change(screen.getByLabelText(/Belső megjegyzés/), { target: { value: "Még nem mentett jegyzet" } });
+  fireEvent.click(download);
+  expect(await screen.findByText(/A modellfájl már nem érhető el/)).toBeInTheDocument();
+  expect(screen.queryByText(/A modellfájl megőrzési ideje lejárt/)).not.toBeInTheDocument();
+  expect(download).toBeDisabled();
+  expect(screen.getByLabelText(/Belső megjegyzés/)).toHaveValue("Még nem mentett jegyzet");
+  fireEvent.click(download);
+  expect(axios.get).toHaveBeenCalledTimes(2);
+});
+
+test("keeps a deleted attachment unavailable after the retention period is increased", async () => {
+  axios.get.mockResolvedValue({ data: { ...order, modelFile: { originalName: "deleted-model.stl", extension: ".stl", size: 123, mimeType: "model/stl", expiresAt: null, expired: false, available: false, missing: true } } });
+  renderAdmin();
+  expect(await screen.findByText("deleted-model.stl")).toBeInTheDocument();
+  expect(screen.getByText(/A modellfájl már nem érhető el/)).toBeInTheDocument();
+  expect(screen.queryByText(/Megőrzési határidő:/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/A modellfájl megőrzési ideje lejárt/)).not.toBeInTheDocument();
+  const download = screen.getByRole("button", { name: "Modellfájl letöltése" });
+  expect(download).toBeDisabled();
+  fireEvent.click(download);
+  expect(axios.get).toHaveBeenCalledTimes(1);
+});
+
+test.each([false, true])("marks missing attachments unavailable in the admin table even when expired is %s", async (expired) => {
+  axios.get.mockResolvedValue({ data: { orders: [{ ...order, modelFile: { available: false, missing: true, expired } }], total: 1, page: 1, pages: 1 } });
+  renderAdmin(undefined, true);
+  expect(await screen.findByText("Nem elérhető")).toBeInTheDocument();
+  expect(screen.queryByText("Csatolva")).not.toBeInTheDocument();
+});
+
+test("marks expired attachments in the admin table", async () => {
+  axios.get.mockResolvedValue({ data: { orders: [{ ...order, modelFile: { expired: true } }], total: 1, page: 1, pages: 1 } });
+  renderAdmin(undefined, true);
+  expect(await screen.findByText("Lejárt")).toBeInTheDocument();
+  expect(screen.queryByText("Csatolva")).not.toBeInTheDocument();
 });

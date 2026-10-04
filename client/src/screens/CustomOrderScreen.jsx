@@ -24,7 +24,11 @@ const CustomOrderScreen = () => {
     const controller = new AbortController();
     setConfigError(false);
     axios.get("/api/custom-orders/config", { signal: controller.signal }).then(({ data }) => {
-      if (!Number.isSafeInteger(data.maxFileSizeBytes) || data.maxFileSizeBytes < 1 || !Array.isArray(data.supportedExtensions)) throw new Error("Invalid upload configuration");
+      if (!Number.isSafeInteger(data.maxFileSizeBytes) || data.maxFileSizeBytes < 1
+        // Older API processes provide upload limits without retention metadata.
+        // Missing informational metadata must not disable otherwise valid uploads.
+        || (data.fileRetentionDays !== undefined && (!Number.isFinite(data.fileRetentionDays) || data.fileRetentionDays <= 0))
+        || !Array.isArray(data.supportedExtensions)) throw new Error("Invalid upload configuration");
       setConfig(data);
     }).catch(() => { if (!controller.signal.aborted) setConfigError(true); });
     return () => controller.abort();
@@ -127,6 +131,7 @@ const CustomOrderScreen = () => {
                   setErrors((current) => ({ ...current, modelFile: undefined, description: undefined }));
                 }} />
                 <FormHelperText>{config ? `${config.supportedExtensions.join(", ").toUpperCase()} · Legfeljebb ${formatFileSize(config.maxFileSizeBytes)} · Egy fájl csatolható.` : configError ? "Feltöltés jelenleg nem érhető el." : "Feltöltési beállítások betöltése…"}</FormHelperText>
+                {config?.fileRetentionDays !== undefined && <FormHelperText>A feltöltött modellfájlt {config.fileRetentionDays.toLocaleString("hu-HU")} napig őrizzük meg, majd automatikusan töröljük. Kérjük, tarts meg egy saját példányt.</FormHelperText>}
                 <FormErrorMessage>{errors.modelFile}</FormErrorMessage>
                 {file && <Button size="sm" variant="ghost" mt="2" onClick={() => { setFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; setErrors((current) => ({ ...current, modelFile: undefined })); }}>Csatolmány eltávolítása</Button>}
               </FormControl>

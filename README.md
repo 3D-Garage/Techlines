@@ -93,8 +93,12 @@ Copy the custom-order settings from `.env.example` into your local environment:
 
 | Variable | Purpose |
 | --- | --- |
-| `CUSTOM_ORDER_UPLOAD_DIR` | Private, persistent storage. Defaults to `private-uploads/custom-orders`, resolved from the repository root. The frontend, public/build directories and Git metadata are rejected. |
+| `CUSTOM_ORDER_UPLOAD_DIR` | Dedicated private, persistent directory containing only custom-order models. Defaults to `private-uploads/custom-orders`, resolved from the repository root. The frontend, public/build directories and Git metadata are rejected. |
 | `CUSTOM_ORDER_MAX_FILE_SIZE_MB` | Maximum size of one model in MiB; defaults to 20, configurable above 0 through 100. Match reverse-proxy request limits accordingly. |
+| `CUSTOM_ORDER_MAX_STORAGE_MB` | Aggregate upload storage limit in MiB; defaults to 1024 (1 GiB), must be at least the per-file limit. Existing files and maximum-size reservations for in-progress uploads count toward this limit. |
+| `CUSTOM_ORDER_MAX_FILES` | Maximum number of stored files and in-progress uploads; defaults to 10,000, must be a positive integer. Bounds filesystem overhead and directory scans even for very small files. |
+| `CUSTOM_ORDER_RETENTION_DAYS` | Model-file retention in days; defaults to 30, must be above 0. Expiry is based on the file's last modification time. Order records and attachment metadata remain in MongoDB. |
+| `CUSTOM_ORDER_CLEANUP_INTERVAL_MINUTES` | Expired-file cleanup interval in minutes; defaults to 60, must be above 0. Cleanup also runs at API startup. |
 | `CUSTOM_ORDER_ADMIN_EMAIL` | One administrator email address for notifications. |
 | `SMTP_HOST`, `SMTP_PORT` | SMTP server and port (default 587). |
 | `SMTP_SECURE` | `true` for implicit TLS (typically port 465); default `false` uses STARTTLS when available. |
@@ -108,22 +112,53 @@ Back up the private upload directory alongside MongoDB and persist it across dep
 Never expose that directory through a static server. Downloads require the same admin bearer
 authorization as the other admin APIs.
 
+Model files expire after the currently configured retention period in every order status,
+including accepted, printing and completed requests. Changing retention also affects existing
+files and legacy requests; shorten it only after checking which models are still needed.
+Startup and periodic cleanup remove only regular files with application-generated UUID model
+filenames, including abandoned files left by a stopped process. Cleanup does not remove fresh files
+to make room. Expired models
+cannot be downloaded, and the admin list and detail view show their expired status while keeping
+the request and original attachment metadata. Admin expiry dates use the stored upload timestamp
+(captured from the file's modification time), or the order creation date for legacy requests.
+Admin responses also check whether the private file actually exists. A missing file stays
+unavailable when retention is increased, including files deleted before this check was added.
+Its original metadata remains visible, but its `expiresAt` is `null`; restoring availability
+requires restoring the file itself. Filesystem access failures return an error rather than
+being reported as deletion.
+The customer form displays the retention period; keep backups under a separately managed
+retention policy if copies must also expire there.
+
+Run **one API process per upload directory**. Aggregate quota checks and in-progress reservations
+are serialized within that process. Multiple API processes sharing a directory need a shared,
+atomic quota/reservation store before deployment; shared disk storage alone is not sufficient.
+The quotas include files already present on disk, and each active upload reserves one file slot
+and the maximum per-file size until its order is saved. Each disk scan uses one reservation
+snapshot for both reserved totals and disk exclusions, even if uploads finish during the scan.
+Consequently, an upload can be rejected when less than one
+maximum-size file of capacity remains even if that particular model is smaller. Keep disk space
+available for other application data and monitor storage and cleanup failures. Unknown regular
+files consume quota but are never automatically deleted. Unexpected subdirectories or symbolic
+links block new uploads; inspect and resolve them before retrying.
+
 | Endpoint | Access / behavior |
 | --- | --- |
-| `GET /api/custom-orders/config` | Public upload extensions and size limit. |
+| `GET /api/custom-orders/config` | Public upload extensions, size limit and `fileRetentionDays`. |
 | `POST /api/custom-orders` | Public; JSON for text-only requests or multipart with optional `modelFile`. |
 | `GET /api/custom-orders?page=1&limit=20&status=new` | Admin; returns `{ orders, total, page, pages }`. Status filter is optional. |
-| `GET /api/custom-orders/:id` | Admin; full request and delivery state, excluding private filesystem names. |
-| `GET /api/custom-orders/:id/file` | Admin; download as an opaque attachment. |
+| `GET /api/custom-orders/:id` | Admin; full request and delivery state, excluding private filesystem names. Attachment metadata includes `expiresAt`, `expired`, `available` and `missing`; the list and status-update responses use the same fields. |
+| `GET /api/custom-orders/:id/file` | Admin; download as an opaque attachment, or HTTP 410 with `CUSTOM_ORDER_FILE_EXPIRED` / `CUSTOM_ORDER_FILE_MISSING` when expired / missing. |
 | `PATCH /api/custom-orders/:id/status` | Admin; JSON with `status`, `adminNotes`, or both. |
 
 The public fields are `customerName`, `customerEmail`, `customerPhone`, `description`,
 `material`, `dimensions`, and `quantity`. Unexpected fields are rejected. Successful creation
 returns HTTP 201 with `{ _id, status, createdAt }`. Validation errors return HTTP 400 with a
-controlled message and field errors; oversized models return 413. Submission attempts are
-limited to 10 per IP per 15 minutes before upload processing, using the app's existing
-in-memory limiter. Multiple API instances require a shared rate-limit store and shared private
-storage; configure trusted proxies explicitly for your deployment before relying on client IPs.
+controlled message and field errors; oversized models return 413. Uploads exceeding aggregate
+storage capacity return 503 with a controlled message; requests without a file remain available.
+Submission attempts are limited to 10 per IP per 15 minutes before upload processing, using the app's existing
+in-memory limiter. Multiple API instances require a shared rate-limit store in addition to the
+shared storage and atomic quota store described above; configure trusted proxies explicitly for
+your deployment before relying on client IPs.
 
 Requests are saved before email is attempted. Notifications are plaintext and include contact
 information, print details, attachment presence and the request ID; model files are not emailed.
@@ -136,6 +171,8 @@ retry is not included.
 The server tests exercise real multipart HTTP requests with isolated files and stubbed database
 and mail dependencies. They cover contact validation, malicious/oversized uploads, cleanup,
 admin authorization, downloads, status/notes, rate limits and notification failure retention.
+Storage tests also cover concurrent reservations, aborted uploads, existing files, expiry,
+periodic cleanup, file counts, symbolic links and failed deletions.
 Client behavior tests can be run with `npm run test --prefix client -- --watchAll=false --runInBand`.
 
 Library references: [Multer upload limits and storage](https://expressjs.com/en/resources/middleware/multer/)

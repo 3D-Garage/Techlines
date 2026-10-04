@@ -74,7 +74,9 @@ const AdminCustomOrdersScreen = () => {
               <Td>{formatOrderDate(order.createdAt)}</Td>
               <Td><Text>{order.customerName}</Text><Text fontSize="xs">{order.customerEmail}</Text><Text fontSize="xs">{order.customerPhone}</Text></Td>
               <Td><CustomOrderStatus status={order.status} /></Td>
-              <Td>{order.modelFile ? "Csatolva" : "Nincs"}</Td>
+              <Td>{order.modelFile?.missing || (order.modelFile?.available === false && !order.modelFile?.expired)
+                ? <Badge colorScheme="gray">Nem elérhető</Badge>
+                : order.modelFile?.expired ? <Badge colorScheme="gray">Lejárt</Badge> : order.modelFile ? "Csatolva" : "Nincs"}</Td>
               <Td>{order.notification?.status === "failed" ? <Badge colorScheme="red">Sikertelen</Badge> : order.notification?.status === "sent" ? "Elküldve" : "Függőben"}</Td>
               <Td><Button as={ReactLink} to={`/admin/custom-orders/${order._id}`} variant="outline" size="sm" colorScheme="purple">Részletek</Button><Text mt="1" fontSize="xs">{order._id}</Text></Td>
             </Tr>)}</Tbody></Table></TableContainer>

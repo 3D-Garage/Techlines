@@ -72,6 +72,7 @@ const AdminCustomOrderScreen = () => {
   };
 
   const download = async () => {
+    if (order.modelFile.expired || order.modelFile.available === false) return;
     setDownloading(true);
     setDownloadError("");
     try {
@@ -84,8 +85,12 @@ const AdminCustomOrderScreen = () => {
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (_error) {
-      setDownloadError("A modellfájl letöltése nem sikerült. Próbáld újra később.");
+    } catch (requestError) {
+      if (requestError.response?.status === 410) {
+        setOrder((current) => current?._id === order._id ? {
+          ...current, modelFile: { ...current.modelFile, available: false, expiresAt: null },
+        } : current);
+      } else setDownloadError("A modellfájl letöltése nem sikerült. Próbáld újra később.");
     } finally { setDownloading(false); }
   };
 
@@ -118,7 +123,11 @@ const AdminCustomOrderScreen = () => {
           {order.modelFile ? <Stack align="start" spacing="2">
             <Text overflowWrap="anywhere">{order.modelFile.originalName}</Text>
             <Text fontSize="sm">{formatFileSize(order.modelFile.size)} · {order.modelFile.extension} · {order.modelFile.mimeType}</Text>
-            <Button colorScheme="purple" variant="outline" onClick={download} isLoading={downloading} loadingText="Letöltés…">Modellfájl letöltése</Button>
+            {!order.modelFile.missing && order.modelFile.expiresAt && <Text fontSize="sm">Megőrzési határidő: {formatOrderDate(order.modelFile.expiresAt)}</Text>}
+            {order.modelFile.missing || (order.modelFile.available === false && !order.modelFile.expired)
+              ? <Alert status="warning"><AlertIcon />A modellfájl már nem érhető el. A kérés adatai továbbra is elérhetők.</Alert>
+              : order.modelFile.expired && <Alert status="warning"><AlertIcon />A modellfájl megőrzési ideje lejárt, már nem tölthető le. A kérés adatai továbbra is elérhetők.</Alert>}
+            <Button colorScheme="purple" variant="outline" onClick={download} isDisabled={order.modelFile.expired || order.modelFile.available === false} isLoading={downloading} loadingText="Letöltés…">Modellfájl letöltése</Button>
             {downloadError && <Alert status="error"><AlertIcon />{downloadError}</Alert>}
           </Stack> : <Text>Nincs csatolt modellfájl.</Text>}
         </Box>

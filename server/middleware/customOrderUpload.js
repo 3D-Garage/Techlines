@@ -1,8 +1,11 @@
 import multer from "multer";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { chmod, open, readFile, unlink } from "node:fs/promises";
-import { getCustomOrderConfig, prepareCustomOrderUploadDirectory, SUPPORTED_MODEL_EXTENSIONS } from "../config/customOrders.js";
+import { lstat, open, readFile, unlink } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
+import { Transform } from "node:stream";
+import { getCustomOrderConfig, SUPPORTED_MODEL_EXTENSIONS } from "../config/customOrders.js";
+import { reserveCustomOrderFile } from "../services/customOrderStorage.js";
 
 const MIME_TYPES = {
   ".stl": "model/stl",
@@ -215,22 +218,80 @@ export async function removeCustomOrderFile(file) {
     await unlink(file.path);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
+  } finally {
+    releaseCustomOrderFile(file);
   }
+}
+
+export function releaseCustomOrderFile(file) {
+  file?.releaseStorage?.();
+}
+
+function quotaStorage(config) {
+  const pending = new Set();
+  const track = (action, callback) => {
+    // Include Multer's callback: late completion can schedule _removeFile.
+    const task = Promise.resolve().then(action).then((result) => callback(null, result), callback);
+    pending.add(task);
+    const settled = () => pending.delete(task);
+    task.then(settled, settled);
+  };
+  return {
+    async waitForIdle() {
+      while (pending.size) await Promise.allSettled([...pending]);
+    },
+    _handleFile(req, file, callback) {
+      track(async () => {
+        const filename = `${randomUUID()}${file.extension}`;
+        const reservation = await reserveCustomOrderFile(config, filename);
+        const saved = { destination: reservation.directory, filename,
+          path: path.join(reservation.directory, filename), releaseStorage: reservation.release };
+        let handle;
+        const aborted = () => file.stream.destroy(uploadError("A fájlfeltöltés megszakadt."));
+        try {
+          if (req.aborted) throw uploadError("A fájlfeltöltés megszakadt.");
+          req.once("aborted", aborted);
+          // Exclusive creation prevents overwriting a pre-existing file/link.
+          handle = await open(saved.path, "wx", 0o600);
+          let received = 0;
+          const sizeGuard = new Transform({
+            transform(chunk, _encoding, done) {
+              received += chunk.length;
+              // Multer may read a sentinel byte past its inclusive size limit.
+              // Never write beyond the space reserved for this upload.
+              if (received > config.maxFileSizeBytes) {
+                done(uploadError("A modellfájl meghaladja a megengedett méretet.", 413));
+              } else done(null, chunk);
+            },
+          });
+          await pipeline(file.stream, sizeGuard, handle.createWriteStream());
+          const info = await lstat(saved.path);
+          return { ...saved, size: info.size, uploadedAt: info.mtime };
+        } catch (error) {
+          if (handle) {
+            await handle.close().catch(() => {});
+            await removeCustomOrderFile(saved).catch(() => {
+              console.error("Custom order partial upload cleanup failed.");
+            });
+          }
+          reservation.release();
+          throw error;
+        } finally {
+          req.off("aborted", aborted);
+        }
+      }, callback);
+    },
+    _removeFile(_req, file, callback) {
+      track(() => removeCustomOrderFile(file), callback);
+    },
+  };
 }
 
 export function createCustomOrderUpload(overrides = {}) {
   return async (req, res, next) => {
     try {
       const config = { ...getCustomOrderConfig(), ...overrides };
-      const storage = multer.diskStorage({
-        destination(_req, _file, callback) {
-          prepareCustomOrderUploadDirectory(config.uploadDir)
-            .then((directory) => callback(null, directory), callback);
-        },
-        filename(_req, file, callback) {
-          callback(null, `${randomUUID()}${file.extension}`);
-        },
-      });
+      const storage = quotaStorage(config);
       const upload = multer({
         storage,
         defParamCharset: "utf8",
@@ -253,6 +314,10 @@ export function createCustomOrderUpload(overrides = {}) {
       }).single("modelFile");
       upload(req, res, (error) => {
         (async () => {
+          // Multer can report a stream error before the storage engine's
+          // asynchronous write/cleanup has finished. Do not respond while a
+          // rejected upload still holds its reservation or partial file.
+          await storage.waitForIdle();
           if (error) {
             if (error instanceof multer.MulterError) {
               const tooLarge = error.code === "LIMIT_FILE_SIZE";
@@ -264,7 +329,6 @@ export function createCustomOrderUpload(overrides = {}) {
             throw error;
           }
           if (req.file) {
-            await chmod(req.file.path, 0o600);
             await validateModelFile(req.file, config.maxFileSizeBytes);
           }
           next();

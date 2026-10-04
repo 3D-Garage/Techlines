@@ -12,9 +12,11 @@ import paypalRoutes from "./routes/paypalRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
 import customOrderRoutes from "./routes/customOrderRoutes.js";
 import { getCustomOrderConfig } from "./config/customOrders.js";
+import { startCustomOrderCleanup } from "./services/customOrderStorage.js";
 
 dotenv.config();
-getCustomOrderConfig();
+const customOrderConfig = getCustomOrderConfig();
+await startCustomOrderCleanup(customOrderConfig);
 connectToDatabase();
 const app = express();
 

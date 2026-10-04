@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import express from "express";
 import jwt from "jsonwebtoken";
 import { once } from "node:events";
-import { mkdtemp, readdir, rm, readFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
+import { setTimeout as delay } from "node:timers/promises";
+import { mkdtemp, readdir, rm, readFile, utimes } from "node:fs/promises";
+import fs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import os from "node:os";
 import CustomOrder from "../models/CustomOrder.js";
@@ -11,6 +15,8 @@ import User from "../models/User.js";
 import { createCustomOrderRouter } from "../routes/customOrderRoutes.js";
 import { createCustomOrderUpload } from "../middleware/customOrderUpload.js";
 import rateLimit from "../middleware/rateLimit.js";
+import { cleanupCustomOrderFiles } from "../services/customOrderStorage.js";
+import { getCustomOrderConfig } from "../config/customOrders.js";
 
 process.env.TOKEN_SECRET = "custom-order-http-test-secret";
 const contact = {
@@ -77,7 +83,7 @@ function memoryModel() {
   return { Order, records };
 }
 
-async function harness(t, { notifyAdmin, maxFileSizeBytes = 4096, limiter } = {}) {
+async function harness(t, { notifyAdmin, maxFileSizeBytes = 4096, limiter, ...storageOverrides } = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "techlines-custom-orders-"));
   const oldUploadDir = process.env.CUSTOM_ORDER_UPLOAD_DIR;
   process.env.CUSTOM_ORDER_UPLOAD_DIR = directory;
@@ -90,7 +96,7 @@ async function harness(t, { notifyAdmin, maxFileSizeBytes = 4096, limiter } = {}
   app.use("/api/custom-orders", createCustomOrderRouter({
     OrderModel: Order,
     notifyAdmin: notifyAdmin || (async (order) => { notifications.push(order._id); }),
-    uploadMiddleware: createCustomOrderUpload({ uploadDir: directory, maxFileSizeBytes }),
+    uploadMiddleware: createCustomOrderUpload({ uploadDir: directory, maxFileSizeBytes, ...storageOverrides }),
     limiter: limiter || ((_req, _res, next) => next()),
   }));
   // Production mounts this router before the global parser so rejected JSON is rate-limited.
@@ -117,7 +123,16 @@ async function harness(t, { notifyAdmin, maxFileSizeBytes = 4096, limiter } = {}
     form.append("modelFile", new Blob([content], { type: mime }), filename);
     return request("", { method: "POST", body: form });
   };
-  return { request, post, upload, Order, records, directory, notifications };
+  return { request, post, upload, Order, records, directory, notifications, base };
+}
+
+function setRetention(t, days) {
+  const previous = process.env.CUSTOM_ORDER_RETENTION_DAYS;
+  process.env.CUSTOM_ORDER_RETENTION_DAYS = String(days);
+  t.after(() => {
+    if (previous === undefined) delete process.env.CUSTOM_ORDER_RETENTION_DAYS;
+    else process.env.CUSTOM_ORDER_RETENTION_DAYS = previous;
+  });
 }
 
 test("custom order schema requires contact, a model or description, and supported status/quantity", () => {
@@ -398,8 +413,11 @@ test("public submission rate limiting runs before file storage and database writ
   const config = await h.request("/config");
   assert.equal(config.status, 200);
   const body = await config.json();
+  assert.deepEqual(Object.keys(body).sort(), ["fileRetentionDays", "maxFileSizeBytes", "supportedExtensions"]);
   assert.deepEqual(body.supportedExtensions, [".stl", ".obj", ".step", ".stp"]);
   assert.ok(body.maxFileSizeBytes > 0);
+  assert.ok(Number.isFinite(body.fileRetentionDays) && body.fileRetentionDays > 0);
+  assert.equal(body.fileRetentionDays, getCustomOrderConfig().retentionMs / (24 * 60 * 60 * 1000));
   assert.equal(body.uploadDir, undefined);
 });
 
@@ -433,4 +451,174 @@ test("admin JSON updates authenticate before parsing and conceal malformed reque
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { message: "Érvénytelen JSON kérés." });
   assert.equal(h.records.get(id).adminNotes, "");
+});
+
+test("aggregate storage refuses further files with a controlled response while text orders still work", async (t) => {
+  const h = await harness(t, { maxFileSizeBytes: 256, maxStorageBytes: 256 });
+  assert.equal((await h.upload()).status, 201);
+  const full = await h.upload();
+  assert.equal(full.status, 503);
+  assert.ok(full.headers.get("retry-after"));
+  assert.match((await full.json()).message, /tárhelye megtelt/);
+  assert.equal((await readdir(h.directory)).length, 1);
+  assert.equal(h.records.size, 1);
+  assert.equal((await h.post()).status, 201);
+});
+
+test("rejected, malformed and failed database uploads release their entire reservation", async (t) => {
+  const h = await harness(t, { maxFileSizeBytes: 256, maxStorageBytes: 256 });
+  assert.equal((await h.upload("model.obj", "x".repeat(257))).status, 413);
+  assert.equal((await h.upload("model.obj", "not a model")).status, 400);
+  assert.equal((await h.upload("model.stl", stl, { ...contact, customerEmail: "bad" })).status, 400);
+  assert.equal((await h.request("", {
+    method: "POST", headers: { "Content-Type": "multipart/form-data; boundary=broken" },
+    body: `--broken\r\nContent-Disposition: form-data; name="modelFile"; filename="model.stl"\r\n\r\n${stl}`,
+  })).status, 400);
+  h.Order.failCreate = true;
+  assert.equal((await h.upload()).status, 500);
+  assert.deepEqual(await readdir(h.directory), []);
+  h.Order.failCreate = false;
+  assert.equal((await h.upload()).status, 201);
+});
+
+test("an unfinished upload reserves capacity, and aborting it removes the partial file and frees capacity", async (t) => {
+  const h = await harness(t, { maxFileSizeBytes: 256, maxStorageBytes: 256 });
+  const pending = httpRequest(h.base, { method: "POST", headers: {
+    "Content-Type": "multipart/form-data; boundary=slow-upload",
+  } });
+  pending.on("error", () => {});
+  t.after(() => pending.destroy());
+  pending.write(`--slow-upload\r\nContent-Disposition: form-data; name="modelFile"; filename="model.stl"\r\n\r\n${stl}`);
+  const waitForFiles = async (count) => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if ((await readdir(h.directory)).length === count) return;
+      await delay(10);
+    }
+    assert.fail(`Expected ${count} upload files`);
+  };
+  await waitForFiles(1);
+  assert.equal((await h.upload()).status, 503);
+  pending.destroy();
+  await waitForFiles(0);
+  assert.equal((await h.upload()).status, 201);
+  assert.equal(h.records.size, 1);
+});
+
+test("expired attachments are disclosed to admins, cleaned up, and cannot be downloaded", async (t) => {
+  const h = await harness(t);
+  const id = (await (await h.upload()).json())._id;
+  const order = h.records.get(id);
+  const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+  order.modelFile.uploadedAt = oldDate;
+  await utimes(path.join(h.directory, order.modelFile.filename), oldDate, oldDate);
+  const detail = await (await h.request(`/${id}`, { headers: adminHeaders() })).json();
+  assert.equal(detail.modelFile.expired, true);
+  assert.ok(new Date(detail.modelFile.expiresAt).getTime() < Date.now());
+  assert.equal((await h.request(`/${id}/file`, { headers: adminHeaders() })).status, 410);
+  await cleanupCustomOrderFiles({ ...getCustomOrderConfig(), uploadDir: h.directory });
+  assert.deepEqual(await readdir(h.directory), []);
+  assert.equal(h.records.size, 1);
+  assert.equal(order.customerEmail, contact.customerEmail);
+  // Older records have no uploadedAt field; their creation time is the fallback.
+  delete order.modelFile.uploadedAt;
+  order.createdAt = oldDate;
+  assert.equal((await h.request(`/${id}/file`, { headers: adminHeaders() })).status, 410);
+  assert.equal((await (await h.request(`/${id}`, { headers: adminHeaders() })).json()).modelFile.expired, true);
+});
+
+test("extending retention cannot restore a deleted attachment in detail, list, update or download responses", async (t) => {
+  setRetention(t, 30);
+  const h = await harness(t);
+  const id = (await (await h.upload()).json())._id;
+  const order = h.records.get(id);
+  const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+  order.modelFile.uploadedAt = oldDate;
+  await utimes(path.join(h.directory, order.modelFile.filename), oldDate, oldDate);
+
+  const before = await (await h.request(`/${id}`, { headers: adminHeaders() })).json();
+  assert.equal(before.modelFile.expired, true);
+  assert.equal(before.modelFile.available, false);
+  assert.equal(before.modelFile.missing, false);
+  assert.equal((await cleanupCustomOrderFiles(getCustomOrderConfig())).removed, 1);
+  assert.deepEqual(await readdir(h.directory), []);
+
+  process.env.CUSTOM_ORDER_RETENTION_DAYS = "60";
+  const assertMissing = (response) => {
+    assert.equal(response.modelFile.expired, false);
+    assert.equal(response.modelFile.available, false);
+    assert.equal(response.modelFile.missing, true);
+    assert.equal(response.modelFile.expiresAt, null);
+    assert.equal(response.modelFile.originalName, "model.stl");
+    assert.equal(response.modelFile.size, order.modelFile.size);
+    assert.equal(response.modelFile.filename, undefined);
+    assert.equal(response.customerEmail, contact.customerEmail);
+  };
+  assertMissing(await (await h.request(`/${id}`, { headers: adminHeaders() })).json());
+  const list = await (await h.request("", { headers: adminHeaders() })).json();
+  assertMissing(list.orders[0]);
+  const updated = await h.request(`/${id}/status`, {
+    method: "PATCH", headers: { ...adminHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "completed", adminNotes: "Keep the request data" }),
+  });
+  assert.equal(updated.status, 200);
+  assertMissing(await updated.json());
+  assert.equal(order.status, "completed");
+  assert.equal(order.adminNotes, "Keep the request data");
+
+  const download = await h.request(`/${id}/file`, { headers: adminHeaders() });
+  assert.equal(download.status, 410);
+  assert.equal((await download.json()).code, "CUSTOM_ORDER_FILE_MISSING");
+  // Legacy records and files removed before the availability check also work
+  // without requiring a deletion timestamp or a database migration.
+  delete order.modelFile.uploadedAt;
+  order.createdAt = oldDate;
+  assertMissing(await (await h.request(`/${id}`, { headers: adminHeaders() })).json());
+  assert.equal(h.records.size, 1);
+});
+
+test("extending retention makes a still-present attachment available again", async (t) => {
+  setRetention(t, 30);
+  const h = await harness(t);
+  const id = (await (await h.upload()).json())._id;
+  h.records.get(id).modelFile.uploadedAt = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+  const expired = await h.request(`/${id}/file`, { headers: adminHeaders() });
+  assert.equal(expired.status, 410);
+  assert.equal((await expired.json()).code, "CUSTOM_ORDER_FILE_EXPIRED");
+
+  process.env.CUSTOM_ORDER_RETENTION_DAYS = "60";
+  const detail = await (await h.request(`/${id}`, { headers: adminHeaders() })).json();
+  assert.equal(detail.modelFile.expired, false);
+  assert.equal(detail.modelFile.available, true);
+  assert.equal(detail.modelFile.missing, false);
+  assert.ok(new Date(detail.modelFile.expiresAt).getTime() > Date.now());
+  const download = await h.request(`/${id}/file`, { headers: adminHeaders() });
+  assert.equal(download.status, 200);
+  assert.equal(await download.text(), stl);
+});
+
+test("filesystem access failures return controlled errors instead of claiming the attachment is missing", async (t) => {
+  const h = await harness(t);
+  const id = (await (await h.upload()).json())._id;
+  const filename = path.join(h.directory, h.records.get(id).modelFile.filename);
+  const originalLstat = fs.lstat;
+  const lstatMock = t.mock.method(fs, "lstat", async (location, ...options) => {
+    if (location === filename) throw Object.assign(new Error(`Permission denied: ${filename}`), { code: "EACCES" });
+    return originalLstat(location, ...options);
+  });
+  syncBuiltinESMExports();
+  try {
+    for (const suffix of ["", `/${id}`, `/${id}/file`]) {
+      const response = await h.request(suffix, { headers: adminHeaders() });
+      assert.equal(response.status, 500);
+      const body = await response.json();
+      assert.deepEqual(Object.keys(body), ["message"]);
+      assert.doesNotMatch(body.message, /Permission|EACCES|techlines-custom-orders|nem érhető el/);
+    }
+  } finally {
+    lstatMock.mock.restore();
+    syncBuiltinESMExports();
+  }
+  const recovered = await (await h.request(`/${id}`, { headers: adminHeaders() })).json();
+  assert.equal(recovered.modelFile.available, true);
+  assert.equal(recovered.modelFile.missing, false);
 });
