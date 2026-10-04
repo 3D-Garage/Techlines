@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Navigate, useLocation } from "react-router-dom";
 import { getUserOrders } from "../redux/actions/userActions";
+import OrderShippingDetails from "../components/OrderShippingDetails";
 
 const YourOrdersScreen = () => {
   const dispatch = useDispatch();
@@ -21,13 +22,14 @@ const YourOrdersScreen = () => {
       {orders.length === 0 ? <Alert status="info"><AlertIcon />You have not placed an order yet.</Alert> : (
         <TableContainer borderWidth="1px" rounded="xl">
           <Table variant="simple">
-            <Thead><Tr><Th>Order</Th><Th>Date</Th><Th>Items</Th><Th>Total</Th><Th>Delivery</Th><Th /></Tr></Thead>
+            <Thead><Tr><Th>Order</Th><Th>Date</Th><Th>Items</Th><Th>Total</Th><Th>Szállítás</Th><Th>Delivery</Th><Th /></Tr></Thead>
             <Tbody>{orders.map((order) => (
               <Tr key={order._id}>
                 <Td fontFamily="mono" fontSize="xs">{order._id}</Td>
                 <Td>{new Date(order.createdAt).toLocaleDateString()}</Td>
                 <Td><UnorderedList>{order.orderItems.map((item) => <ListItem key={item._id}>{item.qty} × {item.name}</ListItem>)}</UnorderedList></Td>
                 <Td>{Number(order.totalPrice).toLocaleString("hu-HU")} Ft</Td>
+                <Td><OrderShippingDetails order={order} /></Td>
                 <Td><Badge colorScheme={order.isDelivered ? "green" : "purple"}>{order.isDelivered ? "Delivered" : "Processing"}</Badge></Td>
                 <Td><Button size="sm" variant="outline" colorScheme="purple" onClick={() => window.print()}>Print</Button></Td>
               </Tr>

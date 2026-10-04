@@ -1,168 +1,67 @@
-// Simple PayPal REST client using global fetch (Node 18+)
-// In tests we will mock these functions via paypalRoutes' __setPayPalService
-
-const PAYPAL_BASE = process.env.PAYPAL_BASE_URL || "https://api-m.sandbox.paypal.com";
-
+// Every network request (including token acquisition) has a bounded timeout.
+const base = () => process.env.PAYPAL_BASE_URL || "https://api-m.sandbox.paypal.com";
+async function request(path, options) {
+  const response = await fetch(`${base()}${path}`, { ...options, signal: AbortSignal.timeout(15000) });
+  const data = await response.json();
+  if (!response.ok) {
+    const error = new Error("PayPal request failed");
+    error.providerStatus = response.status;
+    error.providerCode = data?.details?.[0]?.issue;
+    throw error;
+  }
+  return data;
+}
 export async function getAccessToken() {
-  const client = process.env.PAYPAL_CLIENT_ID;
-  const secret = process.env.PAYPAL_CLIENT_SECRET;
+  const { PAYPAL_CLIENT_ID: client, PAYPAL_CLIENT_SECRET: secret } = process.env;
   if (!client || !secret) throw new Error("Missing PayPal credentials");
-  const auth = Buffer.from(`${client}:${secret}`).toString("base64");
-  const res = await fetch(`${PAYPAL_BASE}/v1/oauth2/token`, {
+  const data = await request("/v1/oauth2/token", {
     method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
+    headers: { Authorization: `Basic ${Buffer.from(`${client}:${secret}`).toString("base64")}`, "Content-Type": "application/x-www-form-urlencoded" },
     body: "grant_type=client_credentials",
   });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`PayPal auth failed: ${res.status} ${text}`);
-  }
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (e) {
-    throw new Error("PayPal auth response parse error");
-  }
+  if (!data.access_token) throw new Error("Missing PayPal access token");
   return data.access_token;
 }
-
-export function normalizePayPalCapture(capture) {
-  const purchaseUnit = Array.isArray(capture?.purchase_units) ? (capture.purchase_units[0] ?? {}) : {};
-  const paymentCapture = Array.isArray(purchaseUnit?.payments?.captures)
-    ? (purchaseUnit.payments.captures[0] ?? {})
-    : {};
-  const amount = paymentCapture.amount || purchaseUnit.amount || capture?.amount || {};
-  const amountValue = Number(amount.value ?? 0);
-  const captureId = paymentCapture.id || capture?.id || null;
-  const orderId =
-    capture?.id === captureId
-      ? capture?.purchase_units?.[0]?.reference_id || capture?.id
-      : capture?.id || purchaseUnit?.reference_id || null;
-
+async function orderRequest(path, { method = "GET", body, requestId } = {}) {
+  const token = await getAccessToken();
+  return request(`/v2/checkout/orders${path}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation", ...(requestId ? { "PayPal-Request-Id": requestId } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+}
+export function normalizePayPalCapture(order) {
+  const unit = order?.purchase_units?.[0];
+  const capture = unit?.payments?.captures?.[0];
   return {
-    orderId: capture?.id || purchaseUnit?.reference_id || null,
-    captureId,
-    status: paymentCapture.status || capture?.status || "UNKNOWN",
-    currency: amount.currency_code || amount.currency || "HUF",
-    amount: {
-      value: String(amount.value ?? amountValue ?? "0"),
-      currency_code: amount.currency_code || amount.currency || "HUF",
-    },
-    value: amountValue,
-    items: Array.isArray(purchaseUnit.items) ? purchaseUnit.items : [],
-    shippingMethod: purchaseUnit.custom_id || capture?.custom_id || "standard",
-    shippingAddress: purchaseUnit.shipping || capture?.shipping || null,
-    payerId: capture?.payer?.payer_id || purchaseUnit?.payee?.merchant_id || null,
-    raw: capture,
+    orderId: order?.id, captureId: capture?.id, status: capture?.status,
+    currency: capture?.amount?.currency_code,
+    value: capture?.amount?.value === undefined ? NaN : Number(capture.amount.value),
+    merchantId: unit?.payee?.merchant_id, payerId: order?.payer?.payer_id,
+    shippingMethod: unit?.custom_id,
   };
 }
-
-export async function getOrder(orderId) {
-  const accessToken = await getAccessToken();
-  const res = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${orderId}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    },
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`PayPal order lookup failed: ${res.status} ${text}`);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
-}
-
-export async function createOrder({
-  total,
-  currency = "HUF",
-  referenceId,
-  items = [],
-  shippingMethod = "standard",
-  shippingAddress,
-}) {
-  const accessToken = await getAccessToken();
-  const normalizedItems = Array.isArray(items)
-    ? items.map((item) => {
-        const productId = item?.productId ?? item?.product_id ?? item?.id ?? item?._id ?? null;
-        return {
-          name: String(item?.name || "Product"),
-          quantity: String(Number(item?.qty ?? item?.quantity ?? 1)),
-          sku: productId ? String(productId) : undefined,
-          unit_amount: {
-            currency_code: currency,
-            value: String(Number(item?.unitPrice ?? item?.price ?? 0)),
-          },
-        };
-      })
-    : [];
-
-  const purchaseUnit = {
-    reference_id: referenceId || "order",
-    custom_id: shippingMethod,
-    amount: { currency_code: currency, value: String(total) },
-  };
-
-  if (normalizedItems.length) purchaseUnit.items = normalizedItems;
-  if (shippingAddress && shippingAddress.address) {
-    purchaseUnit.shipping = {
-      address: {
-        address_line_1: shippingAddress.address,
-        admin_area_2: shippingAddress.city,
-        postal_code: shippingAddress.postalCode,
-        country_code: shippingAddress.country || "HU",
-      },
-    };
-  }
-
-  const body = { intent: "CAPTURE", purchase_units: [purchaseUnit] };
-  const res = await fetch(`${PAYPAL_BASE}/v2/checkout/orders`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`PayPal order create failed: ${res.status} ${text}`);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { id: undefined, raw: text };
-  }
-}
-
-export async function captureOrder(orderId, requestId = `confirm-${orderId}`) {
-  const accessToken = await getAccessToken();
-  const res = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${orderId}/capture`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-      "PayPal-Request-Id": requestId,
-    },
-    body: JSON.stringify({}),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    throw new Error(`PayPal order capture failed: ${res.status} ${text}`);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
+export const getOrder = (id) => orderRequest(`/${encodeURIComponent(id)}`);
+export const captureOrder = (id, requestId) => {
+  if (!requestId) throw new Error("Capture request ID is required");
+  return orderRequest(`/${encodeURIComponent(id)}/capture`, { method: "POST", requestId, body: {} });
+};
+export function createOrder({ total, subtotal, shippingPrice, items, shippingAddress, referenceId, merchantId, fullName, requestId, returnUrl, cancelUrl }) {
+  return orderRequest("", { method: "POST", requestId, body: {
+    intent: "CAPTURE",
+    payment_source: { paypal: { experience_context: {
+      shipping_preference: "SET_PROVIDED_ADDRESS",
+      ...(returnUrl ? { return_url: returnUrl } : {}),
+      ...(cancelUrl ? { cancel_url: cancelUrl } : {}),
+    } } },
+    purchase_units: [{
+      reference_id: referenceId, custom_id: referenceId, payee: { merchant_id: merchantId },
+      amount: { currency_code: "HUF", value: String(total), breakdown: {
+        item_total: { currency_code: "HUF", value: String(subtotal) },
+        shipping: { currency_code: "HUF", value: String(shippingPrice) },
+      } },
+      items: items.map((item) => ({ name: item.name.slice(0, 127), quantity: String(item.qty), sku: String(item.productId), unit_amount: { currency_code: "HUF", value: String(item.unitPrice) } })),
+      shipping: { name: { full_name: fullName }, address: { address_line_1: shippingAddress.address, admin_area_2: shippingAddress.city, postal_code: shippingAddress.postalCode, country_code: shippingAddress.country } },
+    }],
+  } });
 }

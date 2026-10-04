@@ -25,6 +25,8 @@ const productSchema = new mongoose.Schema(
     stock: { type: Number, required: true, default: 0 },
     productIsNew: { type: Boolean, default: false },
     available: { type: Boolean, default: true },
+    archivedAt: Date,
+    inventoryVersion: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

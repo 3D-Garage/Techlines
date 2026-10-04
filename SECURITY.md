@@ -69,31 +69,15 @@ This document describes the security measures currently implemented in the Techl
   - Order schema
     - File: `server/models/Order.js` — `shippingAddress` field names fixed; `paymentMethod` default set to `"PayPal"`.
 
-- Orders and integrity of identity
+- Catalog orders and PayPal integrity
 
-  - Server trusts identity from token, not client body
-    - File: `server/routes/orderRoutes.js`
-    - Ignores `userInfo` from the request body; derives `user`, `username`, `email` from `req.user` (populated by the middleware).
-
-- PayPal payment flow (server-side)
-
-  - Endpoints
-    - File: `server/routes/paypalRoutes.js`
-    - `POST /api/paypal/create-order` (protected): computes total server-side (using DB prices) and creates a PayPal order via REST API.
-    - `POST /api/paypal/capture-order` (protected): performs server-side capture using REST API.
-  - Service client
-    - File: `server/services/paypalService.js`
-    - Retrieves access token and calls PayPal `create/capture` APIs using environment credentials (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, optional `PAYPAL_BASE_URL`).
-  - Server-side total calculation (prevents client tampering)
-    - `create-order` recalculates subtotal from product prices in DB + shipping, rounds in HUF, and sends that to PayPal.
-
-- Frontend changes to enforce server mediation
-
-  - File: `client/src/components/PayPalButton.jsx`
-    - `createOrder`: calls server `POST /api/paypal/create-order` with `Authorization: Bearer <token>` and cart items.
-    - `onApprove`: calls server `POST /api/paypal/capture-order` with the PayPal `orderID`, then triggers app order creation.
-  - File: `client/src/redux/actions/orderAction.js`
-    - Adds `Authorization: Bearer <token>` to `/api/orders` POST.
+  - [Checkout security and rollout](docs/CHECKOUT_SECURITY.md) documents the secured catalog flow and acceptance checks.
+  - Owner-scoped durable checkout attempts freeze server-priced items, required images and the validated webshop address before payment. Identical requests replay safely; changed content under the same key returns 409.
+  - Unpaid order creation and standalone capture endpoints return 410. Confirmation and status reads enforce local ownership with 404 for foreign IDs.
+  - Provider approval precedes transactional stock reservation. Verified merchant/order/checkout references, exact HUF amount and COMPLETED capture/order precede transactional finalization. Admin delivery requires linked completed checkout evidence.
+  - Persisted fenced leases and PayPal request IDs coordinate concurrent/restarted requests. Provider lookup precedes capture retries; uncertain outcomes retain inventory. REVIEW is query-only after the 30-minute capture retry budget, checked every five minutes.
+  - Orders/products are archived. Versioned admin stock updates conflict on stale edits. Checkout is disabled without transaction support, required indexes and complete payment configuration.
+  - Frontend persists creation identity and active checkout by user, resumes polling after reload, hides payment starts while pending and clears the cart only after verified completion. Personal payment/order console logs are removed.
 
 - Operational
   - `PORT` variable fixed (`server/index.js` uses `process.env.PORT`).
@@ -104,25 +88,22 @@ This document describes the security measures currently implemented in the Techl
 
 - Required environment variables
   - `MONGO_URI`, `TOKEN_SECRET`, `PORT`
-  - PayPal: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, optional `PAYPAL_BASE_URL` (defaults to sandbox)
+  - PayPal: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MERCHANT_ID`, optional `PAYPAL_BASE_URL` (defaults to sandbox)
   - `CORS_ORIGIN` for allowed frontend origin
-- Client PayPal Client ID
-  - `client/src/client_id.js` contains the JS SDK client ID. This is acceptable for the PayPal JS SDK, but ensure no sandbox account credentials are present in comments. See TODO to move to a safer config/CI injection and remove secrets from the repo.
+- The public PayPal client ID is fetched from `/api/paypal/client-id`. The client secret is server-only.
 
 ## Verified by Tests
 
 - Auth middleware sets `req.user` on valid JWT and rejects missing/invalid tokens.
 - Login returns token; duplicate registration rejected.
-- Order creation uses `req.user` (token) rather than client-provided identity.
-- PayPal routes: server computes totals from DB; capture returns structured payload.
+- Isolated real MongoDB replica-set tests cover ownership, concurrency, durable payment recovery, validation, stock release, archival and startup index collisions.
+- Frontend and production-build browser tests cover pending/reload recovery and the saved webshop address. See the checkout document for commands and the separate live Sandbox acceptance procedure.
 
 ## Remaining Risks and Considerations
 
 - Rate limiting is an in-memory stopgap and not distributed; use a production-ready limiter.
 - No comprehensive input validation schema yet (IDs, shapes, value ranges) — see TODO.
 - CSP header is not set; current headers reduce some risk but do not prevent all XSS vectors.
-- Server does not yet verify that stored order totals exactly match PayPal captured amounts; the flow is split between payment capture and DB order creation.
-- `client_id.js` tracked in VCS; comments must not include any credentials; prefer environment injection.
 
 ## TODO Roadmap (Prioritized)
 
@@ -135,12 +116,6 @@ High priority
   - Auth (email format, password policy)
   - Order payloads (ObjectId validation, qty ranges, shipping fields)
   - PayPal endpoints (items array schema, shippingPrice numeric bounds)
-- Move order creation fully server-side after PayPal capture:
-  - New endpoint: `POST /api/orders/confirm-from-capture` takes `orderID` only, recomputes totals from DB, fetches PayPal capture details, verifies amounts and status (`COMPLETED`), then persists the order (`paidAt`, `paymentDetails`).
-  - Reject if totals mismatch or capture is not completed.
-- Remove sensitive comments and decouple client PayPal ID:
-  - Ensure `client/src/client_id.js` contains no sandbox credentials in comments.
-  - Prefer build-time env injection for the PayPal client ID and ensure the file is not tracked or is generated.
 - Shorten JWT access token lifetime and introduce refresh token rotation, with server-side revocation (e.g., on password change/logout).
 
 Medium priority
@@ -168,4 +143,4 @@ Low priority
 ## How to Run Tests
 
 - Command: `npm run test:server`
-- Tests use stubs/mocks; no live network or DB required.
+- The suite combines unit stubs and an isolated real MongoDB replica set; it does not use the application database or live PayPal. First setup may download the test MongoDB binary. Browser and explicit Sandbox checks are documented in [CHECKOUT_SECURITY.md](docs/CHECKOUT_SECURITY.md).

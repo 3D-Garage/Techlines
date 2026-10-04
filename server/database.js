@@ -10,7 +10,7 @@ const connectToDatabase = async () => {
     });
     console.log(`MongoDB Connected: ${connect.connection.host}`);
   } catch (error) {
-    console.log(`Error: ${error.message}`);
+    throw error;
   }
 };
 

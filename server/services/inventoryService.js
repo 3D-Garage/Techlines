@@ -16,30 +16,29 @@ export const normalizeInventoryProductId = (productId) => {
   }
 
   const normalizedId = typeof productId === "string" ? productId.trim() : String(productId);
-  if (!normalizedId || !mongoose.Types.ObjectId.isValid(normalizedId)) {
+  if (!/^[a-f\d]{24}$/i.test(normalizedId)) {
     throw new InventoryError("Invalid product ID.", 400, "INVALID_PRODUCT_ID");
   }
 
-  return normalizedId;
+  return normalizedId.toLowerCase();
 };
 
 export const normalizeInventoryQuantity = (qty) => {
   const quantity = Number(qty);
 
-  if (!Number.isInteger(quantity) || quantity <= 0) {
+  if (!Number.isSafeInteger(quantity) || quantity <= 0) {
     throw new InventoryError("Invalid quantity.", 400, "INVALID_QUANTITY");
   }
 
   return quantity;
 };
 
-export async function validateInventory(items = [], _options = {}) {
+export function aggregateInventory(items = []) {
   if (!Array.isArray(items) || items.length === 0) {
     throw new InventoryError("No inventory items provided.", 400, "EMPTY_INVENTORY");
   }
 
-  const validatedItems = [];
-
+  const grouped = new Map();
   for (const item of items) {
     if (!item || typeof item !== "object") {
       throw new InventoryError("Invalid inventory item.", 400, "INVALID_ITEM");
@@ -47,6 +46,14 @@ export async function validateInventory(items = [], _options = {}) {
 
     const productId = normalizeInventoryProductId(item.productId ?? item.product_id ?? item.id);
     const qty = normalizeInventoryQuantity(item.qty);
+    grouped.set(productId, normalizeInventoryQuantity((grouped.get(productId) || 0) + qty));
+  }
+  return [...grouped].sort(([a], [b]) => a.localeCompare(b)).map(([productId, qty]) => ({ productId, qty }));
+}
+
+export async function validateInventory(items = []) {
+  const validatedItems = [];
+  for (const { productId, qty } of aggregateInventory(items)) {
     const product = await Product.findById(productId);
 
     if (!product) {
@@ -54,7 +61,7 @@ export async function validateInventory(items = [], _options = {}) {
     }
 
     const available = product.available ?? true;
-    if (available !== true) {
+    if (available !== true || product.archivedAt) {
       throw new InventoryError("Product is unavailable.", 409, "PRODUCT_UNAVAILABLE");
     }
 
@@ -95,10 +102,11 @@ export async function decrementInventory(items = [], session) {
         {
           _id: productId,
           available: true,
+          archivedAt: { $exists: false },
           stock: { $gte: qty },
         },
         {
-          $inc: { stock: -qty },
+          $inc: { stock: -qty, inventoryVersion: 1 },
         },
         {
           session,

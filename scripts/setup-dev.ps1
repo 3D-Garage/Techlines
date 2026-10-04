@@ -134,6 +134,7 @@ MONGO_URI=mongodb://127.0.0.1:27017/techlines
 TOKEN_SECRET=$tokenSecret
 PAYPAL_CLIENT_ID=
 PAYPAL_CLIENT_SECRET=
+PAYPAL_MERCHANT_ID=
 PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com
 CORS_ORIGIN=http://localhost:3000
 PORT=5000

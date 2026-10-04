@@ -342,9 +342,9 @@ A root store öt slice-ot kombinál:
 | Slice | Fő mezők | Tartós tárolás | Feladat |
 |---|---|---|---|
 | `products` | `products`, `product`, `loading`, `error`, `reviewSent` | nincs | katalógus, aktív termék, értékelés állapota |
-| `cart` | `cart`, `subtotal`, `expressShipping`, `loading`, `error` | `cartItems` és `subtotal` a `localStorage`-ban | kosár és kliensoldali részösszeg |
+| `cart` | `cart`, `subtotal`, `shippingMethod`, `loading`, `error` | `cartItems` és `subtotal` a `localStorage`-ban; a szállítási piszkozat fiókonként mentve | kosár és kliensoldali részösszeg |
 | `user` | `userInfo`, `orders`, `loading`, `error`, `updateSuccess` | `userInfo` a `localStorage`-ban | munkamenet, profil, saját rendelések |
-| `order` | `shippingAddress`, `orderInfo`, `loading`, `error` | nincs | aktuális checkout és mentett rendelés |
+| `order` | `shippingAddress`, `recipientPhone`, `foxpostLocker`, `foxpostListReady`, `orderInfo`, `loading`, `error` | `shippingDraft:<userId>`; az aktív fizetés külön `activeCheckout:<userId>` kulcson | aktuális checkout és mentett rendelés |
 | `admin` | `users`, `orders`, `loading`, `error` | nincs | admin konzol adatai |
 
 ### 6.5 Aszinkron adatáramlás
@@ -669,6 +669,8 @@ subtotal = Σ (termék kliensoldali egységára × mennyiség)
 - A kosárban lévő ár és készlet snapshot; a checkout előtt a szervernek újra kell ellenőriznie az aktuális adatbázisértékeket.
 
 ### 10.6 Szállítás
+
+A FOXPOST automatás pénztár aktuális díjszabása, szerveroldali validációja, pillanatképei és helyreállítása a [FOXPOST dokumentációban](docs/FOXPOST.md) szerepel. A standard és expressz mód is a szerveroldali `pricingService` árajánlatát használja.
 
 A tényleges checkout komponens jelenlegi szabálya:
 

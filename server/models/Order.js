@@ -14,6 +14,22 @@ const orderSchema = new mongoose.Schema(
         product_id: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "Product" },
       },
     ],
+    shippingMethod: { type: String },
+    recipientPhone: { type: String, required: function () { return this.shippingMethod === "foxpost"; }, validate: { validator: function (value) { return this.shippingMethod !== "foxpost" || /^\+36(?:20|30|31|50|51|70)\d{7}$/.test(value); }, message: "Invalid recipient mobile phone" } },
+    foxpostLocker: {
+      type: new mongoose.Schema({
+        place_id: { type: String, required: true },
+        operator_id: { type: String, required: true },
+        name: { type: String, required: true },
+        type: { type: String, enum: ["A-BOX", "Z-BOX"], required: true },
+        address: { type: String, required: true },
+        street: { type: String, required: true },
+        city: { type: String, required: true },
+        postalCode: { type: String, required: true },
+        country: { type: String, required: true },
+      }, { _id: false }),
+      required: function () { return this.shippingMethod === "foxpost"; },
+    },
     shippingAddress: {
       address: { type: String, required: true },
       city: { type: String, required: true },
@@ -40,6 +56,8 @@ const orderSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    checkoutId: { type: mongoose.Schema.Types.ObjectId, unique: true, sparse: true },
+    archivedAt: { type: Date },
     paymentStatus: {
       type: String,
       default: "PENDING",
@@ -53,7 +71,7 @@ const orderSchema = new mongoose.Schema(
     isDelivered: { type: Boolean, required: true, default: false },
     deliveredAt: { type: Date },
   },
-  { timestamps: true },
+  { timestamps: true, autoIndex: false },
 );
 
 const Order = mongoose.model("Order", orderSchema);
