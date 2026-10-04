@@ -12,10 +12,17 @@ import paypalRoutes from "./routes/paypalRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
 import customOrderRoutes from "./routes/customOrderRoutes.js";
 import { getCustomOrderConfig } from "./config/customOrders.js";
+import { initializeCheckout, startCheckoutWorker } from "./services/checkoutService.js";
 
 dotenv.config();
 getCustomOrderConfig();
-connectToDatabase();
+await connectToDatabase();
+try {
+  await initializeCheckout();
+  startCheckoutWorker();
+} catch (error) {
+  console.error(`Checkout disabled: ${error.message}`);
+}
 const app = express();
 
 // Minimal security headers without external deps

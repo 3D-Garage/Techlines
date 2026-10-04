@@ -61,10 +61,26 @@ export const cartSlice = createSlice({
       localStorage.removeItem("cartItems");
       localStorage.removeItem("subtotal");
     },
+    removePurchasedItems: (state, { payload }) => {
+      const purchased = new Map();
+      for (const item of payload) {
+        const id = String(item.product_id);
+        purchased.set(id, (purchased.get(id) || 0) + Number(item.qty));
+      }
+      state.cart = state.cart.map((item) => ({ ...item, qty: Math.max(0, Number(item.qty) - (purchased.get(String(item.id)) || 0)) }))
+        .filter((item) => item.qty > 0);
+      state.subtotal = calcSubtotal(state.cart);
+      if (state.cart.length) updateLocalStorage(state.cart);
+      else {
+        state.expressShipping = false;
+        localStorage.removeItem("cartItems");
+        localStorage.removeItem("subtotal");
+      }
+    },
   },
 });
 
-export const { setLoading, setError, cartItemAdd, cartItemRemoval, setExpressShipping, clearCart } = cartSlice.actions;
+export const { setLoading, setError, cartItemAdd, cartItemRemoval, setExpressShipping, clearCart, removePurchasedItems } = cartSlice.actions;
 export default cartSlice.reducer;
 
 export const cartSelector = (state) => state.cart;

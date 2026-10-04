@@ -1,5 +1,5 @@
 import { PayPalScriptProvider, PayPalButtons, usePayPalScriptReducer } from "@paypal/react-paypal-js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, AlertIcon, Box, Spinner, useColorModeValue as mode } from "@chakra-ui/react";
 // This values are the props in the UI
 const style = { layout: "vertical", color: "gold" };
@@ -7,14 +7,17 @@ const style = { layout: "vertical", color: "gold" };
 const ButtonWrapper = ({
   showSpinner,
   total,
-  onPaymentSuccess,
   onPaymentError,
   cart,
   shippingMethod,
-  token,
   disabled,
+  shippingAddress,
+  checkout,
 }) => {
   const [{ isPending }] = usePayPalScriptReducer();
+  // The SDK keeps callbacks from its initial render. Read the latest form values.
+  const values = useRef();
+  values.current = { cart, shippingMethod, shippingAddress, checkout };
   const numericTotal = Number(typeof total === "function" ? total() : total || 0);
 
   return (
@@ -27,47 +30,25 @@ const ButtonWrapper = ({
         fundingSource={undefined}
         createOrder={async () => {
           try {
-            const headers = { "Content-Type": "application/json" };
-            if (token) headers.Authorization = `Bearer ${token}`;
-            const res = await fetch("/api/paypal/create-order", {
-              method: "POST",
-              headers,
-              body: JSON.stringify({
-                items: cart.map((i) => ({ productId: i.id, qty: i.qty })),
-                shippingMethod,
-              }),
+            const current = values.current;
+            return await current.checkout.create({
+                items: current.cart.map((i) => ({ productId: i.id, qty: i.qty })),
+                shippingMethod: current.shippingMethod,
+                shippingAddress: current.shippingAddress,
             });
-            const data = await res.json();
-            console.log("PayPal create-order status", res.status, data);
-            if (!res.ok) throw new Error(data?.message || "Failed to create PayPal order");
-            console.log("PayPal order created", data?.id);
-            return data.id;
           } catch (e) {
-            console.error("PayPal create-order error", e);
             onPaymentError(e);
+            throw e;
           }
         }}
-        onApprove={async function (data) {
+        onApprove={async function () {
           try {
-            console.log("PayPal onApprove orderID", data?.orderID);
-            const headers = { "Content-Type": "application/json" };
-            if (token) headers.Authorization = `Bearer ${token}`;
-            const res = await fetch("/api/orders/confirm", {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ orderID: data.orderID }),
-            });
-            const order = await res.json();
-            console.log("Order confirmation status", res.status, order);
-            if (!res.ok) throw new Error(order?.message || "Failed to confirm PayPal order");
-            onPaymentSuccess(order);
+            await values.current.checkout.approve();
           } catch (e) {
-            console.error("PayPal confirmation error", e);
             onPaymentError(e);
           }
         }}
         onError={(err) => {
-          console.error("PayPal Buttons onError", err);
           onPaymentError(err);
         }}
       />
@@ -75,9 +56,11 @@ const ButtonWrapper = ({
   );
 };
 
-const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingMethod, token, disabled }) => {
+const PayPalButton = ({ total, onPaymentError, cart, shippingMethod, shippingAddress, disabled, checkout }) => {
   const [clientId, setClientId] = useState("");
   const [loadError, setLoadError] = useState("");
+  const borderColor = mode("gray.200", "gray.700");
+  const background = mode("white", "transparent");
 
   useEffect(() => {
     const loadClientId = async () => {
@@ -105,11 +88,11 @@ const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingM
   return (
     <Box
       border="1px solid"
-      borderColor={mode("gray.200", "gray.700")}
+      borderColor={borderColor}
       borderRadius="md"
       overflow="hidden"
       p={2}
-      bg={mode("white", "transparent")}
+      bg={background}
     >
       <PayPalScriptProvider
         options={{
@@ -121,11 +104,11 @@ const PayPalButton = ({ total, onPaymentSuccess, onPaymentError, cart, shippingM
         <ButtonWrapper
           showSpinner={false}
           total={total}
-          onPaymentSuccess={onPaymentSuccess}
           onPaymentError={onPaymentError}
           cart={cart}
           shippingMethod={shippingMethod}
-          token={token}
+          shippingAddress={shippingAddress}
+          checkout={checkout}
           disabled={disabled}
         />
       </PayPalScriptProvider>

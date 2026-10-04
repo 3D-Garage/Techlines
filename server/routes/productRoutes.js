@@ -6,13 +6,13 @@ import protectRoute, { admin } from "../middleware/autMiddleware.js";
 const productRoutes = express.Router();
 
 const getProducts = asyncHandler(async (req, res) => {
-  const products = await Product.find({ available: true });
+  const products = await Product.find({ available: true, archivedAt: { $exists: false } });
   res.json(products);
 });
 
 const getProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
-  if (product) {
+  if (product && !product.archivedAt) {
     res.json(product);
   } else {
     res.status(404);
@@ -51,6 +51,9 @@ const createProductReview = asyncHandler(async (req, res) => {
 });
 
 const createProduct = asyncHandler(async (req, res) => {
+  for (const field of ["price", "stock"]) {
+    if (!Number.isSafeInteger(Number(req.body[field])) || Number(req.body[field]) < 0) { res.status(400); throw new Error("Price and stock must be nonnegative integers."); }
+  }
   const product = await Product.create({
     name: req.body.name,
     image: req.body.image,
@@ -71,18 +74,29 @@ const updateProduct = asyncHandler(async (req, res) => {
     throw new Error("Product not found.");
   }
 
+  const version = req.body.inventoryVersion;
+  if (!Number.isSafeInteger(version) || version < 0) { res.status(409); throw new Error("Reload the product before editing its inventory."); }
+  const changes = {};
   for (const field of ["name", "image", "brand", "category", "description"]) {
-    if (req.body[field] !== undefined) product[field] = req.body[field];
+    if (req.body[field] !== undefined) changes[field] = req.body[field];
   }
-  if (req.body.price !== undefined) product.price = Number(req.body.price);
-  if (req.body.stock !== undefined) product.stock = Number(req.body.stock);
-  if (req.body.productIsNew !== undefined) product.productIsNew = Boolean(req.body.productIsNew);
-  const updatedProduct = await product.save();
+  for (const field of ["price", "stock"]) {
+    if (req.body[field] !== undefined) {
+      const value = Number(req.body[field]);
+      if (!Number.isSafeInteger(value) || value < 0) { res.status(400); throw new Error("Price and stock must be nonnegative integers."); }
+      changes[field] = value;
+    }
+  }
+  if (req.body.productIsNew !== undefined) changes.productIsNew = Boolean(req.body.productIsNew);
+  const versionFilter = version === 0 ? { $or: [{ inventoryVersion: 0 }, { inventoryVersion: { $exists: false } }] } : { inventoryVersion: version };
+  const updatedProduct = await Product.findOneAndUpdate({ _id: product._id, archivedAt: { $exists: false }, ...versionFilter },
+    { $set: changes, $inc: { inventoryVersion: 1 } }, { new: true, runValidators: true });
+  if (!updatedProduct) { res.status(409); throw new Error("Product changed. Reload before saving."); }
   res.json(updatedProduct);
 });
 
 const deleteProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findByIdAndDelete(req.params.id);
+  const product = await Product.findByIdAndUpdate(req.params.id, { $set: { archivedAt: new Date(), available: false }, $inc: { inventoryVersion: 1 } }, { new: true });
   if (!product) {
     res.status(404);
     throw new Error("Product not found.");

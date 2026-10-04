@@ -40,7 +40,7 @@ export const createOrder = (order) => async (dispatch, getState) => {
   }
 };
 
-export const confirmOrder = (orderID) => async (dispatch, getState) => {
+export const confirmOrder = (checkoutId) => async (dispatch, getState) => {
   dispatch(setLoading(true));
   const {
     user: { userInfo },
@@ -52,8 +52,8 @@ export const confirmOrder = (orderID) => async (dispatch, getState) => {
         authorization: userInfo?.token ? `Bearer ${userInfo.token}` : undefined,
       },
     };
-    const { data } = await axios.post("/api/orders/confirm", { orderID }, config);
-    dispatch(orderCreated(data));
+    const { data } = await axios.post("/api/orders/confirm", { checkoutId }, config);
+    if (data.paymentStatus === "COMPLETED") dispatch(orderCreated(data));
     return data;
   } catch (error) {
     dispatch(

@@ -40,6 +40,8 @@ const orderSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    checkoutId: { type: mongoose.Schema.Types.ObjectId, unique: true, sparse: true },
+    archivedAt: { type: Date },
     paymentStatus: {
       type: String,
       default: "PENDING",
@@ -53,7 +55,7 @@ const orderSchema = new mongoose.Schema(
     isDelivered: { type: Boolean, required: true, default: false },
     deliveredAt: { type: Date },
   },
-  { timestamps: true },
+  { timestamps: true, autoIndex: false },
 );
 
 const Order = mongoose.model("Order", orderSchema);
