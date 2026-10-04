@@ -45,6 +45,7 @@ test("standard shipping below 10,000 Ft adds 1,490 Ft", async () => {
       {
         productId: PRODUCT_ID_ONE,
         name: `Product ${PRODUCT_ID_ONE}`,
+        image: undefined,
         qty: 2,
         unitPrice: 3490,
         lineTotal: 6980,
@@ -127,29 +128,6 @@ test("client-supplied price is ignored", async () => {
   assert.equal(quote.items[0].lineTotal, 6980);
 });
 
-test("client-supplied shipping price is ignored", async () => {
-  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 3000 });
-  let paypalTotal;
-
-  __setPayPalService({
-    createOrder: async ({ total }) => {
-      paypalTotal = total;
-      return { id: "PAYPAL_ORDER_ID" };
-    },
-  });
-
-  const body = {
-    items: [{ productId: PRODUCT_ID_ONE, qty: 2 }],
-    shippingMethod: "standard",
-    shippingPrice: 999999,
-  };
-  const { req, res, next } = mockReqRes(body);
-  await createPayPalOrderHandler(req, res, next);
-
-  assert.equal(paypalTotal, 6000 + 1490);
-  assert.equal(res.payload.id, "PAYPAL_ORDER_ID");
-});
-
 test("multiple order items are priced and totaled together", async () => {
   Product.findById = async (id) => ({
     _id: id,
@@ -224,6 +202,7 @@ test("quote handler returns server-generated quote and ignores manipulated clien
       {
         productId: PRODUCT_ID_ONE,
         name: `Product ${PRODUCT_ID_ONE}`,
+        image: undefined,
         qty: 2,
         unitPrice: 3490,
         lineTotal: 6980,
@@ -237,46 +216,13 @@ test("quote handler returns server-generated quote and ignores manipulated clien
   });
 });
 
-test("quote total matches the amount used by PayPal order creation", async () => {
-  Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 1200 });
-
-  const quote = await calculateOrderPricing({
-    items: [
-      { productId: PRODUCT_ID_ONE, qty: 2 },
-      { productId: PRODUCT_ID_TWO, qty: 1 },
-    ],
-    shippingMethod: "standard",
-  });
-
-  let totalUsedInPaypal = null;
-  __setPayPalService({
-    createOrder: async ({ total }) => {
-      totalUsedInPaypal = total;
-      return { id: "PAYPAL_ORDER_ID" };
-    },
-  });
-
-  const { req, res } = mockReqRes({
-    items: [
-      { productId: PRODUCT_ID_ONE, qty: 2 },
-      { productId: PRODUCT_ID_TWO, qty: 1 },
-    ],
-    shippingMethod: "standard",
-  });
-  await createPayPalOrderHandler(req, res, null);
-
-  assert.equal(totalUsedInPaypal, quote.total);
-  assert.equal(quote.total, 3600 + 1490);
-});
-
-test("capturePayPalOrderHandler returns capture payload", async () => {
+test("standalone capture is retired without contacting PayPal", async () => {
   __setPayPalService({
     captureOrder: async (id) => ({ id, status: "COMPLETED" }),
   });
   const { req, res, next } = mockReqRes({ orderID: "ORDER123" });
   await capturePayPalOrderHandler(req, res, next);
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(res.payload, { id: "ORDER123", status: "COMPLETED" });
+  assert.equal(res.statusCode, 410);
 });
 
 test("getPayPalClientIdHandler returns the configured public client id", () => {

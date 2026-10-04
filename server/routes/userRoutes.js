@@ -105,11 +105,11 @@ const updateUserProfile = asyncHandler(async (req, res) => {
 
 const getUserOrders = asyncHandler(async (req, res) => {
   if (req.user._id.toString() !== req.params.id && !req.user.isAdmin) {
-    res.status(403);
-    throw new Error("Forbidden");
+    res.status(404);
+    throw new Error("Orders not found.");
   }
 
-  const orders = await Order.find({ user: req.params.id }).sort({ createdAt: -1 });
+  const orders = await Order.find({ user: req.params.id, archivedAt: { $exists: false } }).sort({ createdAt: -1 });
   res.json(orders);
 });
 

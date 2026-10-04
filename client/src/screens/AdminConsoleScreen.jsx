@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link as ReactLink, Navigate, useLocation } from "react-router-dom";
 import { getProducts } from "../redux/actions/productAction";
+import axios from "axios";
 import {
   createAdminProduct, deleteAdminProduct, deleteOrder, deleteUser, getAllOrders, getAllUsers,
   removeReview, setDelivered, updateAdminProduct,
@@ -25,6 +26,34 @@ const AdminConsoleScreen = () => {
   const { products } = useSelector((state) => state.products);
   const [form, setForm] = useState(emptyProduct);
   const [editingId, setEditingId] = useState(null);
+  const [pendingPayments, setPendingPayments] = useState([]);
+  const [paymentError, setPaymentError] = useState("");
+  const loadPending = async () => {
+    try {
+      const { data } = await axios.get("/api/checkout/admin/pending", { headers: { Authorization: `Bearer ${userInfo.token}` } });
+      setPendingPayments(data);
+      setPaymentError("");
+    } catch (_error) { setPaymentError("A függő fizetések nem kérdezhetők le."); }
+  };
+  useEffect(() => {
+    if (!userInfo?.isAdmin) return;
+    const load = async () => {
+      try {
+        const { data } = await axios.get("/api/checkout/admin/pending", { headers: { Authorization: `Bearer ${userInfo.token}` } });
+        setPendingPayments(data);
+      } catch (_error) { setPaymentError("A függő fizetések nem kérdezhetők le."); }
+    };
+    void load();
+    const timer = setInterval(load, 60000);
+    return () => clearInterval(timer);
+  }, [userInfo]);
+  const reconcilePayment = async (id) => {
+    try {
+      await axios.post(`/api/checkout/${id}/reconcile`, {}, { headers: { Authorization: `Bearer ${userInfo.token}` } });
+      await loadPending();
+      dispatch(getAllOrders());
+    } catch (_error) { setPaymentError("A fizetés újraellenőrzése nem sikerült."); }
+  };
 
   useEffect(() => {
     if (userInfo?.isAdmin === true) {
@@ -52,7 +81,7 @@ const AdminConsoleScreen = () => {
   const openNewProduct = () => { setEditingId(null); setForm(emptyProduct); modal.onOpen(); };
   const openEditProduct = (product) => {
     setEditingId(product._id);
-    setForm({ name: product.name, image: product.image, brand: product.brand, category: product.category, description: product.description, price: product.price, stock: product.stock, productIsNew: product.productIsNew });
+    setForm({ name: product.name, image: product.image, brand: product.brand, category: product.category, description: product.description, price: product.price, stock: product.stock, productIsNew: product.productIsNew, inventoryVersion: product.inventoryVersion ?? 0 });
     modal.onOpen();
   };
   const updateField = (event) => {
@@ -72,7 +101,7 @@ const AdminConsoleScreen = () => {
       {error && <Alert status="error" mb="4"><AlertIcon />{error}</Alert>}
       {loading && <Spinner color="purple.500" mb="4" />}
       <Tabs colorScheme="purple" variant="enclosed" isLazy>
-        <TabList overflowX="auto"><Tab>Users</Tab><Tab>Products</Tab><Tab>Reviews</Tab><Tab>Orders</Tab></TabList>
+        <TabList overflowX="auto"><Tab>Users</Tab><Tab>Products</Tab><Tab>Reviews</Tab><Tab>Orders</Tab><Tab>Függő fizetések</Tab></TabList>
         <TabPanels>
           <TabPanel px="0">
             <TableContainer><Table size="sm"><Thead><Tr><Th>Name</Th><Th>Email</Th><Th>Registered</Th><Th>Role</Th><Th /></Tr></Thead>
@@ -105,7 +134,17 @@ const AdminConsoleScreen = () => {
                 <Td>{order.shippingAddress.address}, {order.shippingAddress.postalCode} {order.shippingAddress.city}, {order.shippingAddress.country}</Td>
                 <Td>{order.orderItems.map((item) => <Text key={item._id}>{item.qty} × {item.name}</Text>)}</Td><Td isNumeric>{Number(order.totalPrice).toLocaleString("hu-HU")} Ft</Td>
                 <Td><Badge colorScheme={order.isDelivered ? "green" : "purple"}>{order.isDelivered ? "Delivered" : "Processing"}</Badge></Td>
-                <Td>{!order.isDelivered && <Button size="xs" colorScheme="purple" mr="2" onClick={() => run(setDelivered(order._id), "Order marked delivered.")}>Delivered</Button>}<Button size="xs" colorScheme="red" variant="outline" onClick={() => askAndRun("Remove this order?", deleteOrder(order._id), "Order removed.")}>Remove</Button></Td>
+                <Td>{!order.isDelivered && <Button size="xs" colorScheme="purple" mr="2" isDisabled={order.paymentStatus !== "COMPLETED" || !order.checkoutId} onClick={() => run(setDelivered(order._id), "Order marked delivered.")}>Delivered</Button>}<Button size="xs" colorScheme="red" variant="outline" onClick={() => askAndRun("Archive this order?", deleteOrder(order._id), "Order archived.")}>Archive</Button></Td>
+              </Tr>)}</Tbody>
+            </Table></TableContainer>
+          </TabPanel>
+          <TabPanel px="0">
+            {paymentError && <Alert status="error"><AlertIcon />{paymentError}</Alert>}
+            <Button onClick={loadPending} mb="4">Frissítés</Button>
+            <TableContainer><Table size="sm"><Thead><Tr><Th>Checkout</Th><Th>PayPal</Th><Th>Állapot</Th><Th>Foglalás</Th><Th>Probléma</Th><Th /></Tr></Thead>
+              <Tbody>{pendingPayments.map((payment) => <Tr key={payment._id}>
+                <Td>{payment._id}</Td><Td>{payment.paypalOrderId}</Td><Td>{payment.status}</Td><Td>{payment.reservation}</Td><Td>{payment.issue}</Td>
+                <Td><Button size="xs" onClick={() => reconcilePayment(payment._id)}>Újraellenőrzés</Button></Td>
               </Tr>)}</Tbody>
             </Table></TableContainer>
           </TabPanel>

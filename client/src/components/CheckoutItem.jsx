@@ -2,7 +2,7 @@ import { Flex, Select, useColorModeValue as mode, Box, Text, Divider, Spacer, Im
 import { useDispatch } from "react-redux";
 import { addCartItem } from "../redux/actions/cartAction";
 
-const CheckoutItem = ({ cartItem }) => {
+const CheckoutItem = ({ cartItem, readOnly = false }) => {
   const { name, image, price, stock, qty, id } = cartItem;
   const dispatch = useDispatch();
 
@@ -24,7 +24,7 @@ const CheckoutItem = ({ cartItem }) => {
             {name}
           </Text>
           <Spacer />
-          <Select
+          {readOnly ? <Text>Quantity: {qty}</Text> : <Select
             maxW="64px"
             focusBorderColor={mode("orange.500", "orange.200")}
             value={qty}
@@ -37,7 +37,7 @@ const CheckoutItem = ({ cartItem }) => {
                 {x + 1}
               </option>
             ))}
-          </Select>
+          </Select>}
         </Flex>
         <Box>
           <Text fontWeight="bold">{price} Ft</Text>

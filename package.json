@@ -12,6 +12,8 @@
     "server": "node server/index.js",
     "app": "concurrently \"npm run server\" \"npm run client\"",
     "test:server": "node server/scripts/run-tests.js",
+    "test:browser": "playwright test",
+    "test:paypal:sandbox": "node server/scripts/verify-sandbox-checkout.js",
     "test:server:coverage": "node --test --experimental-test-coverage server/__tests__/*.test.js",
     "seed": "node server/scripts/seed.js",
     "setup:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-dev.ps1"
@@ -38,5 +40,9 @@
     "nodemailer": "^10.0.10",
     "react-scripts": "^5.0.1",
     "validator": "^13.15.35"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "mongodb-memory-server": "^11.3.0"
   }
 }

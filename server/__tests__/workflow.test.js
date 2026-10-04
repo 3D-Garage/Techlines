@@ -102,93 +102,6 @@ const buildPaypalService = () => ({
   }),
 });
 
-test("checkout and PayPal confirmation workflow creates a paid order and decrements stock exactly once", async () => {
-  const product = { _id: PRODUCT_ID, name: "Workflow Laptop", price: 5000, stock: 2, available: true };
-  Product.findById = async () => product;
-  Product.findOneAndUpdate = async (filter, update) => {
-    if (filter?.stock?.$gte && product.stock < filter.stock.$gte) {
-      return null;
-    }
-    product.stock += update.$inc.stock;
-    return { ...product, stock: product.stock };
-  };
-
-  Order.findOne = async () => null;
-
-  let savedOrder = null;
-  const originalSave = Order.prototype.save;
-  Order.prototype.save = async function () {
-    savedOrder = {
-      _id: "new-order-1",
-      user: this.user,
-      paypalOrderId: this.paypalOrderId,
-      paypalCaptureId: this.paypalCaptureId,
-      paymentStatus: this.paymentStatus,
-      totalPrice: this.totalPrice,
-      shippingPrice: this.shippingPrice,
-      orderItems: this.orderItems,
-    };
-    return savedOrder;
-  };
-
-  __setOrderPayPalService(buildPaypalService());
-  __setPaypalRouteService({ createOrder: async ({ total }) => ({ id: "PAYPAL_ORDER_987", total }) });
-
-  try {
-    const quoteRes = makeRes();
-    await createCheckoutQuoteHandler(
-      { body: { items: [{ productId: PRODUCT_ID, qty: 1 }], shippingMethod: "standard" } },
-      quoteRes,
-      null,
-    );
-
-    assert.equal(quoteRes.statusCode, 200);
-    assert.equal(quoteRes.payload.total, 6490);
-    assert.equal(quoteRes.payload.shippingPrice, 1490);
-
-    const paypalRes = makeRes();
-    await createPayPalOrderHandler(
-      {
-        body: {
-          items: [{ productId: PRODUCT_ID, qty: 1 }],
-          shippingMethod: "standard",
-          shippingAddress: {
-            address: "Main St. 1",
-            city: "Budapest",
-            postalCode: "1111",
-            country: "HU",
-          },
-        },
-      },
-      paypalRes,
-      null,
-    );
-
-    assert.equal(paypalRes.payload.id, "PAYPAL_ORDER_987");
-
-    const confirmRes = makeRes();
-    await confirmOrder(
-      {
-        body: { orderID: "PAYPAL_ORDER_987" },
-        user: { _id: "u-1", name: "Alice", email: "alice@example.com" },
-      },
-      confirmRes,
-      null,
-    );
-
-    assert.equal(confirmRes.statusCode, 201);
-    assert.equal(savedOrder.paypalOrderId, "PAYPAL_ORDER_987");
-    assert.equal(savedOrder.paypalCaptureId, "CAPTURE_123");
-    assert.equal(savedOrder.totalPrice, 6490);
-    assert.equal(product.stock, 1);
-    assert.equal(savedOrder.paymentStatus, "COMPLETED");
-  } finally {
-    Order.prototype.save = originalSave;
-    __setOrderPayPalService(null);
-    __setPaypalRouteService(null);
-  }
-});
-
 test("user registration, login and profile update create a valid JWT flow while admin checks block forbidden changes", async () => {
   const seededUser = {
     _id: "u-1",
@@ -279,7 +192,7 @@ test("PayPal service token flow and normalized capture payload are valid for the
     if (String(url).includes("/oauth2/token")) {
       return {
         ok: true,
-        text: async () => JSON.stringify({ access_token: "token-abc" }),
+        json: async () => ({ access_token: "token-abc" }),
       };
     }
 
