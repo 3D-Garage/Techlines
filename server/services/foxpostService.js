@@ -44,6 +44,7 @@ export function createFoxpostDirectory({ fetchList = (...args) => fetch(...args)
           const points = await response.json();
           if (!Array.isArray(points) || !points.length) throw new Error("Invalid FOXPOST list");
           const lockers = points.map((point) => normalizeLocker(point, now())).filter(Boolean);
+          if (!lockers.length) throw new Error("No eligible FOXPOST lockers");
           cache = { lockers, expiresAt: now() + CACHE_TTL };
           return lockers;
         } catch (_error) {
