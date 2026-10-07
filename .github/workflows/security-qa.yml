@@ -3,7 +3,7 @@ name: Security QA
 on:
   pull_request:
   push:
-    branches: [master, qa/security-integration-suite]
+    branches: [master]
 
 permissions:
   contents: read
@@ -18,7 +18,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Unimplemented security gates and real regressions must fail this job.
+      # Security gates and real regressions must fail this job.
       - run: npm run test:server
 
   client:

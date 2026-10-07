@@ -1,6 +1,6 @@
 # Security QA and PR #25
 
-[PR #25](https://github.com/3D-Garage/Techlines/pull/25) adds HTTP regression checks and CI. This update rebases it onto master `a291c85` and migrates its payment checks to the durable checkout contract delivered by [#24](https://github.com/3D-Garage/Techlines/issues/24). Remaining production remediation is tracked by [#26](https://github.com/3D-Garage/Techlines/issues/26).
+[PR #25](https://github.com/3D-Garage/Techlines/pull/25) adds HTTP regression checks, CI, and production safeguards for custom-order upload retention, shared storage quota, and aborted-upload cleanup. This update rebases it onto master `a291c85` and migrates its payment checks to the durable checkout contract delivered by [#24](https://github.com/3D-Garage/Techlines/issues/24). Remaining production remediation is tracked by [#26](https://github.com/3D-Garage/Techlines/issues/26).
 
 Required outcomes must not be weakened, skipped or changed to `todo` to make the release look ready. The CI repair implements login input validation, controlled quote validation errors and the three upload protections below. Other production work packages in #26 remain outside this change.
 
@@ -36,7 +36,7 @@ The payment integration suite starts an isolated local `MongoMemoryReplSet`; it 
 
 ## Local evidence
 
-Verification on **2026-10-07**, Windows, Node **22.23.0**, rebased onto master **`a291c85`**:
+Local verification on **2026-10-07**, Windows, Node **22.23.0**, rebased onto master **`a291c85`**:
 
 | Run | Passed | Failed | Skipped/todo | Exit code |
 | --- | ---: | ---: | ---: | ---: |
@@ -45,9 +45,9 @@ Verification on **2026-10-07**, Windows, Node **22.23.0**, rebased onto master *
 | Updated focused security suite | 185 | 9 | 0 | 1 |
 | Full client suite, including XSS and checkout | 83 | 0 | 0 | 0 |
 
-The pre-repair runs above had nine failures: four credential-shape checks, two quote-validation checks and three upload implementation gates. The repair replaces the upload blockers with executable behavior coverage and adds a configuration check. The full server suite now passes **214/214** with **zero failures, skips or todo tests**. The payment HTTP file passes all **39** checks. Verification used Windows and Node **22.23.0** on **2026-10-07**. The current log is `.test-artifacts/qa-fix-server.log`; these local results do not claim a new hosted CI run.
+The pre-repair runs above had nine failures: four credential-shape checks, two quote-validation checks and three upload implementation gates. The repair replaces the upload blockers with executable behavior coverage and adds a configuration check. The full server suite now passes **214/214** with **zero failures, skips or todo tests**. The payment HTTP file passes all **39** checks. Verification used Windows and Node **22.23.0** on **2026-10-07**. The current log is `.test-artifacts/qa-fix-server.log`.
 
-Full-suite coverage reports **95.01% lines, 92.13% branches and 94.70% functions** across loaded server files. Coverage is not evidence that the failing requirements are satisfied. Logs are stored locally under `.test-artifacts/qa-rebase-{coverage,security,client}.log`. Hosted CI requires publication of this branch; local results do not claim a hosted run.
+Full-suite coverage reports **95.01% lines, 92.13% branches and 94.70% functions** across loaded server files. Coverage is not evidence that the requirements are satisfied. Logs are stored locally under `.test-artifacts/qa-rebase-{coverage,security,client}.log`. Hosted [Security QA run 37678417178](https://github.com/3D-Garage/Techlines/actions/runs/37678417178) passed both server and client jobs for commit `7336b2a`; the workflow change here avoids duplicate push and pull-request runs for feature branches.
 
 For historical context, the previous QA evidence on 2026-10-04 reported 111 passing/35 failing server checks. Those numbers used the retired payment contract and must not be treated as the current result. Replacing retired-flow assertions with the new contract explains much of the change in failure counts; it is not a claim that this QA PR repaired production payment code.
 
