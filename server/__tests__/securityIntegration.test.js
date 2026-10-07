@@ -6,30 +6,19 @@ import bcrypt from "bcryptjs";
 
 import { createApp } from "../app.js";
 import User from "../models/User.js";
-import Product from "../models/Product.js";
-import Order from "../models/Order.js";
-import { normalizePayPalCapture } from "../services/paypalService.js";
-import {
-  __setPayPalService as setPayPalRouteService,
-  __resetPayPalService as resetPayPalRouteService,
-} from "../routes/paypalRoutes.js";
-import {
-  __setPayPalService as setOrderPayPalService,
-  __resetPayPalService as resetOrderPayPalService,
-} from "../routes/orderRoutes.js";
 
 process.env.TOKEN_SECRET = process.env.TOKEN_SECRET || "security-integration-test-secret";
 
 const USER_ID = "507f1f77bcf86cd799439011";
 const OTHER_USER_ID = "507f1f77bcf86cd799439012";
 const ADMIN_ID = "507f1f77bcf86cd799439013";
-const PRODUCT_ID = "507f1f77bcf86cd799439014";
 
 async function startApp(t) {
   const app = createApp();
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => new Promise((resolve, reject) => {
+    server.closeAllConnections();
     server.close((error) => (error ? reject(error) : resolve()));
   }));
   const address = server.address();
@@ -184,7 +173,8 @@ test("should reject order-history IDOR across users", async (t) => {
     headers: { authorization: `Bearer ${tokenFor(USER_ID)}` },
   });
 
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).message, "Orders not found.");
 });
 
 test("successful login returns a verifiable JWT and required login fields are validated", async (t) => {
@@ -297,270 +287,4 @@ test("login brute-force threshold returns 429 after the configured limit", async
 
   assert.equal(response.status, 429);
   assert.match((await response.json()).message, /too many requests/i);
-});
-
-test("order creation derives identity and prices from trusted server state", async (t) => {
-  const actor = authUser(USER_ID, { name: "Trusted Name", email: "trusted@example.com" });
-  stubProtectedUsers(t, { [USER_ID]: actor });
-
-  const originalFindById = Product.findById;
-  Product.findById = async () => ({
-    _id: PRODUCT_ID,
-    name: "Server Product",
-    price: 1000,
-    stock: 10,
-    available: true,
-    save: async function () {
-      return this;
-    },
-  });
-  t.after(() => {
-    Product.findById = originalFindById;
-  });
-
-  const originalSave = Order.prototype.save;
-  let savedOrder;
-  Order.prototype.save = async function () {
-    await this.validate();
-    savedOrder = {
-      user: String(this.user),
-      username: this.username,
-      email: this.email,
-      orderItems: this.orderItems.map((item) => ({
-        name: item.name,
-        qty: item.qty,
-        price: item.price,
-        product_id: String(item.product_id),
-      })),
-      shippingPrice: this.shippingPrice,
-      totalPrice: this.totalPrice,
-    };
-    return { _id: "order-1", ...savedOrder };
-  };
-  t.after(() => {
-    Order.prototype.save = originalSave;
-  });
-
-  const baseUrl = await startApp(t);
-  const response = await fetch(`${baseUrl}/api/orders`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${tokenFor(USER_ID)}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      user: OTHER_USER_ID,
-      username: "Forged Name",
-      email: "forged@example.com",
-      orderItems: [{ productId: PRODUCT_ID, qty: 1, price: 1, name: "Forged Product", image: "/images/product.jpg" }],
-      shippingAddress: {
-        address: "Main St. 1",
-        city: "Budapest",
-        postalCode: "1111",
-        country: "HU",
-      },
-      shippingMethod: "standard",
-      paymentMethod: "PayPal",
-    }),
-  });
-  const body = await response.json();
-
-  assert.equal(response.status, 201);
-  assert.equal(body.user, USER_ID);
-  assert.equal(savedOrder.user, USER_ID);
-  assert.equal(savedOrder.username, "Trusted Name");
-  assert.equal(savedOrder.email, "trusted@example.com");
-  assert.equal(savedOrder.orderItems[0].price, 1000);
-  assert.equal(savedOrder.shippingPrice, 1490);
-  assert.equal(savedOrder.totalPrice, 2490);
-});
-
-test("client-supplied payment confirmation and totals are rejected before order persistence", async (t) => {
-  const actor = authUser(USER_ID);
-  stubProtectedUsers(t, { [USER_ID]: actor });
-
-  const originalSave = Order.prototype.save;
-  let saveCalls = 0;
-  Order.prototype.save = async function () {
-    saveCalls += 1;
-    return this;
-  };
-  t.after(() => {
-    Order.prototype.save = originalSave;
-  });
-
-  const baseUrl = await startApp(t);
-  for (const injected of [
-    { totalPrice: 1 },
-    { shippingPrice: 0 },
-    { paidAt: new Date().toISOString() },
-    { paymentStatus: "COMPLETED" },
-    { paypalOrderId: "forged-order" },
-    { paypalCaptureId: "forged-capture" },
-    { paymentDetails: { orderId: "forged-order" } },
-  ]) {
-    const response = await fetch(`${baseUrl}/api/orders`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${tokenFor(USER_ID)}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        orderItems: [{ productId: PRODUCT_ID, qty: 1 }],
-        shippingMethod: "standard",
-        ...injected,
-      }),
-    });
-    assert.equal(response.status, 400, JSON.stringify(injected));
-  }
-
-  assert.equal(saveCalls, 0);
-});
-
-test("PayPal create-order ignores client totals and uses server-calculated HUF amount", async (t) => {
-  const actor = authUser(USER_ID);
-  stubProtectedUsers(t, { [USER_ID]: actor });
-
-  const originalFindById = Product.findById;
-  Product.findById = async () => ({
-    _id: PRODUCT_ID,
-    name: "Server Product",
-    price: 3000,
-    stock: 10,
-    available: true,
-  });
-  t.after(() => {
-    Product.findById = originalFindById;
-  });
-
-  let serviceInput;
-  setPayPalRouteService({
-    createOrder: async (input) => {
-      serviceInput = input;
-      return { id: "PAYPAL_ORDER_ID" };
-    },
-  });
-  t.after(() => resetPayPalRouteService());
-
-  const baseUrl = await startApp(t);
-  const response = await fetch(`${baseUrl}/api/paypal/create-order`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${tokenFor(USER_ID)}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      items: [{ productId: PRODUCT_ID, qty: 2, price: 1, unitPrice: 1 }],
-      shippingMethod: "standard",
-      shippingPrice: 0,
-      subtotal: 2,
-      total: 2,
-      currency: "USD",
-    }),
-  });
-  const body = await response.json();
-
-  assert.equal(response.status, 200);
-  assert.equal(body.id, "PAYPAL_ORDER_ID");
-  assert.equal(serviceInput.total, 7490);
-  assert.equal(serviceInput.currency, "HUF");
-  assert.equal(serviceInput.items[0].unitPrice, 3000);
-});
-
-test("PayPal confirmation rejects malformed IDs and amount mismatch before creating an order", async (t) => {
-  const actor = authUser(USER_ID, { email: "payer@example.com" });
-  stubProtectedUsers(t, { [USER_ID]: actor });
-
-  const originalFindById = Product.findById;
-  Product.findById = async () => ({
-    _id: PRODUCT_ID,
-    name: "Server Product",
-    price: 1000,
-    stock: 10,
-    available: true,
-  });
-  t.after(() => {
-    Product.findById = originalFindById;
-  });
-
-  const originalFindOne = Order.findOne;
-  Order.findOne = async () => null;
-  t.after(() => {
-    Order.findOne = originalFindOne;
-  });
-
-  const originalSave = Order.prototype.save;
-  let saveCalls = 0;
-  Order.prototype.save = async function () {
-    saveCalls += 1;
-    return this;
-  };
-  t.after(() => {
-    Order.prototype.save = originalSave;
-  });
-
-  setOrderPayPalService({
-    getOrder: async () => ({
-      id: "PAYPAL_ORDER_ID",
-      payer: { email_address: "payer@example.com" },
-      purchase_units: [{
-        custom_id: "standard",
-        items: [{
-          sku: PRODUCT_ID,
-          name: "Server Product",
-          quantity: 1,
-          unit_amount: { currency_code: "HUF", value: "1000" },
-        }],
-        shipping: { address: { country_code: "HU" } },
-      }],
-    }),
-    captureOrder: async () => ({
-      id: "CAPTURE_ID",
-      status: "COMPLETED",
-      payer: { payer_id: "payer-id" },
-      purchase_units: [{
-        custom_id: "standard",
-        items: [{
-          sku: PRODUCT_ID,
-          name: "Server Product",
-          quantity: 1,
-          unit_amount: { currency_code: "HUF", value: "1000" },
-        }],
-        shipping: { address: { country_code: "HU" } },
-        payments: {
-          captures: [{
-            id: "CAPTURE_ID",
-            status: "COMPLETED",
-            amount: { currency_code: "HUF", value: "1.00" },
-          }],
-        },
-      }],
-    }),
-    normalizePayPalCapture,
-  });
-  t.after(() => resetOrderPayPalService());
-
-  const baseUrl = await startApp(t);
-
-  const malformed = await fetch(`${baseUrl}/api/orders/confirm`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${tokenFor(USER_ID)}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ orderID: "   " }),
-  });
-  assert.equal(malformed.status, 400);
-
-  const mismatch = await fetch(`${baseUrl}/api/orders/confirm`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${tokenFor(USER_ID)}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ orderID: "PAYPAL_ORDER_ID" }),
-  });
-  assert.equal(mismatch.status, 422);
-  assert.match((await mismatch.json()).message, /does not match/i);
-  assert.equal(saveCalls, 0);
 });

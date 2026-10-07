@@ -31,6 +31,6 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
       - run: npm ci --prefix client
-      - run: npm run test --prefix client -- --watchAll=false --runInBand CustomOrders.test.jsx
+      - run: npm run test --prefix client -- --watchAll=false --runInBand
         env:
           CI: "true"

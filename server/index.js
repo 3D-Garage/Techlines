@@ -1,4 +1,4 @@
-﻿import dotenv from "dotenv";
+import dotenv from "dotenv";
 import connectToDatabase from "./database.js";
 import { getCustomOrderConfig } from "./config/customOrders.js";
 import { initializeCheckout, startCheckoutWorker } from "./services/checkoutService.js";
