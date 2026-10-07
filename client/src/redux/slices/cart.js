@@ -1,4 +1,5 @@
 import { createSlice } from "@reduxjs/toolkit";
+import { userLogin, userLogout } from "./user";
 
 const calcSubtotal = (cartState) => {
   let result = 0;
@@ -10,7 +11,7 @@ export const initialState = {
   loading: false,
   error: null,
   cart: JSON.parse(localStorage.getItem("cartItems")) ?? [],
-  expressShipping: false,
+  shippingMethod: "standard",
   subtotal: localStorage.getItem("cartItems")
     ? calcSubtotal(JSON.parse(localStorage.getItem("cartItems")))
     : 0,
@@ -51,13 +52,13 @@ export const cartSlice = createSlice({
       state.loading = false;
       state.error = null;
     },
-    setExpressShipping: (state, { payload }) => {
-      state.expressShipping = payload;
+    setShippingMethod: (state, { payload }) => {
+      if (["standard", "express", "foxpost"].includes(payload)) state.shippingMethod = payload;
     },
     clearCart: (state) => {
       state.cart = [];
       state.subtotal = 0;
-      state.expressShipping = false;
+      state.shippingMethod = "standard";
       localStorage.removeItem("cartItems");
       localStorage.removeItem("subtotal");
     },
@@ -72,15 +73,19 @@ export const cartSlice = createSlice({
       state.subtotal = calcSubtotal(state.cart);
       if (state.cart.length) updateLocalStorage(state.cart);
       else {
-        state.expressShipping = false;
+        state.shippingMethod = "standard";
         localStorage.removeItem("cartItems");
         localStorage.removeItem("subtotal");
       }
     },
   },
+  extraReducers: (builder) => {
+    builder.addCase(userLogout, (state) => { state.shippingMethod = "standard"; });
+    builder.addCase(userLogin, (state) => { state.shippingMethod = "standard"; });
+  },
 });
 
-export const { setLoading, setError, cartItemAdd, cartItemRemoval, setExpressShipping, clearCart, removePurchasedItems } = cartSlice.actions;
+export const { setLoading, setError, cartItemAdd, cartItemRemoval, setShippingMethod, clearCart, removePurchasedItems } = cartSlice.actions;
 export default cartSlice.reducer;
 
 export const cartSelector = (state) => state.cart;

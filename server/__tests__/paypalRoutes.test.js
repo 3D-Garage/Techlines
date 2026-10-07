@@ -83,6 +83,13 @@ test("standard shipping above 10,000 Ft is free", async () => {
   assert.equal(quote.total, 12000);
 });
 
+for (const subtotal of [9999, 10000, 10001]) test(`FOXPOST pricing at ${subtotal} Ft works without a locker selection`, async () => {
+  Product.findById = async (id) => ({ _id: id, name: "Product", price: subtotal });
+  const quote = await calculateOrderPricing({ items: [{ productId: PRODUCT_ID_ONE, qty: 1 }], shippingMethod: "foxpost" });
+  assert.equal(quote.shippingPrice, subtotal < 10000 ? 1490 : 0);
+  assert.equal(quote.total, subtotal + (subtotal < 10000 ? 1490 : 0));
+});
+
 test("express shipping always charges 3,990 Ft", async () => {
   Product.findById = async (id) => ({ _id: id, name: `Product ${id}`, price: 1000 });
 

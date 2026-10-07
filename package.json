@@ -10,9 +10,11 @@
   "scripts": {
     "client": "npm run start --prefix client",
     "server": "node server/index.js",
-    "app": "concurrently \"npm run server\" \"npm run client\"",
+    "server:dev": "node server/scripts/start-dev.js",
+    "app": "concurrently \"npm run server:dev\" \"npm run client\"",
     "test:server": "node server/scripts/run-tests.js",
     "test:browser": "playwright test",
+    "test:foxpost:live": "node server/scripts/verify-foxpost-widget.js",
     "test:paypal:sandbox": "node server/scripts/verify-sandbox-checkout.js",
     "test:server:coverage": "node --test --experimental-test-coverage server/__tests__/*.test.js",
     "seed": "node server/scripts/seed.js",

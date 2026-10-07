@@ -10,6 +10,7 @@ import userRoutes from "./routes/userRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import paypalRoutes from "./routes/paypalRoutes.js";
 import checkoutRoutes from "./routes/checkoutRoutes.js";
+import shippingRoutes from "./routes/shippingRoutes.js";
 import customOrderRoutes from "./routes/customOrderRoutes.js";
 import { getCustomOrderConfig } from "./config/customOrders.js";
 import { initializeCheckout, startCheckoutWorker } from "./services/checkoutService.js";
@@ -59,6 +60,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/checkout", checkoutRoutes);
+app.use("/api/shipping", shippingRoutes);
 app.use("/api/paypal", paypalRoutes);
 
 // Error handling

@@ -2,11 +2,13 @@ import mongoose from "mongoose";
 import { createHash, randomUUID } from "node:crypto";
 import validator from "validator";
 import CheckoutAttempt from "../models/CheckoutAttempt.js";
+import CheckoutRequest from "../models/CheckoutRequest.js";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import { aggregateInventory, decrementInventory } from "./inventoryService.js";
 import { calculateOrderPricing, SUPPORTED_SHIPPING_METHODS } from "./pricingService.js";
 import * as paypal from "./paypalService.js";
+import { normalizeRecipientPhone, resolveFoxpostLocker, lockerShippingAddress } from "./foxpostService.js";
 
 const WINDOW = 30 * 60 * 1000;
 const LEASE = 120 * 1000;
@@ -15,14 +17,6 @@ let ready = false;
 let provider = paypal;
 export const __setPayPalService = (service) => { provider = service || paypal; };
 const fail = (message, statusCode) => Object.assign(new Error(message), { statusCode });
-async function validateCreation(callback) {
-  try { return await callback(); }
-  catch (error) {
-    const status = error.statusCode || (error.name === "ValidationError" ? 400 : 500);
-    if ([400, 404, 409, 422].includes(status)) error.creationRejected = true;
-    throw error;
-  }
-}
 export function requireCheckoutReady() {
   if (!ready || mongoose.connection.readyState !== 1) throw fail("Checkout is unavailable: transaction-capable database and payment configuration are required.", 503);
 }
@@ -33,7 +27,7 @@ export async function initializeCheckout() {
   if (!process.env.PAYPAL_MERCHANT_ID || !process.env.PAYPAL_CLIENT_ID || !process.env.PAYPAL_CLIENT_SECRET) throw new Error("PayPal configuration is incomplete (client, secret, merchant ID required)");
   const hello = await mongoose.connection.db.admin().command({ hello: 1 });
   if (!hello.setName && hello.msg !== "isdbgrid") throw new Error("Checkout requires a MongoDB replica set or sharded cluster");
-  for (const model of [Order, CheckoutAttempt]) {
+  for (const model of [Order, CheckoutAttempt, CheckoutRequest]) {
     await model.createCollection();
     for (const [fields, options] of model.schema.indexes()) {
       if (!options.unique) continue;
@@ -48,6 +42,7 @@ export async function initializeCheckout() {
   }
   await Order.createIndexes();
   await CheckoutAttempt.createIndexes();
+  await CheckoutRequest.createIndexes();
   // Prove transaction support and permissions using a no-op write.
   await transaction(async (session) => {
     await CheckoutAttempt.updateOne({ _id: new mongoose.Types.ObjectId() }, { $set: { issue: "probe" } }, { session });
@@ -57,13 +52,22 @@ export async function initializeCheckout() {
 
 async function transaction(callback) {
   const session = await mongoose.startSession();
-  try { return await session.withTransaction(() => callback(session)); }
+  try {
+    let result;
+    await session.withTransaction(async () => { result = await callback(session); });
+    return result;
+  }
   finally { await session.endSession(); }
 }
 
 export function normalizeCheckoutInput(body = {}) {
   if (typeof body.requestId !== "string" || !/^[A-Za-z0-9_-]{8,100}$/.test(body.requestId)) throw fail("A valid requestId is required.", 400);
   if (!SUPPORTED_SHIPPING_METHODS.has(body.shippingMethod)) throw fail("Unsupported shipping method", 400);
+  if (body.shippingMethod === "foxpost") {
+    const foxpostLockerId = typeof body.foxpostLockerId === "string" || typeof body.foxpostLockerId === "number" ? String(body.foxpostLockerId) : "";
+    if (!/^\d{1,20}$/.test(foxpostLockerId)) throw fail("Válassz FOXPOST csomagautomatát.", 400);
+    return { items: aggregateInventory(body.items), shippingMethod: "foxpost", foxpostLockerId, recipientPhone: normalizeRecipientPhone(body.recipientPhone) };
+  }
   const address = body.shippingAddress;
   const shippingAddress = {};
   for (const [key, max] of [["address", 300], ["city", 120], ["postalCode", 60], ["country", 2]]) {
@@ -75,32 +79,78 @@ export function normalizeCheckoutInput(body = {}) {
   return { items: aggregateInventory(body.items), shippingMethod: body.shippingMethod, shippingAddress };
 }
 
-export async function createCheckout(user, body) {
+async function decideCreation(key, candidate, rejection) {
+  try {
+    return await transaction(async (session) => {
+      const decided = await CheckoutRequest.findOne(key).session(session);
+      if (decided) return decided;
+      // Payments saved before request decisions were introduced remain resumable.
+      const existing = await CheckoutAttempt.findOne(key).session(session);
+      if (existing) return { checkout: existing._id };
+      const checkout = candidate ? new mongoose.Types.ObjectId() : undefined;
+      const [decision] = await CheckoutRequest.create([{
+        ...key, status: candidate ? "CREATED" : "REJECTED", checkout, rejection,
+      }], { session });
+      if (candidate) await CheckoutAttempt.create([{ ...candidate, ...key, _id: checkout }], { session });
+      return decision;
+    });
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    // The unique request key selects one committed outcome across all servers.
+    const decided = await CheckoutRequest.findOne(key);
+    if (decided) return decided;
+    const existing = await CheckoutAttempt.findOne(key);
+    if (existing) return { checkout: existing._id };
+    throw error;
+  }
+}
+
+export async function createCheckout(user, body = {}) {
   requireCheckoutReady();
   if (!user?._id) throw fail("Not authorized, no user.", 401);
-  const input = await validateCreation(() => normalizeCheckoutInput(body));
-  const fingerprint = createHash("sha256").update(JSON.stringify(input)).digest("hex");
-  let attempt = await CheckoutAttempt.findOne({ user: user._id, requestId: body.requestId });
-  if (!attempt) {
-    const quote = await validateCreation(() => calculateOrderPricing(input));
-    const snapshot = new Order({
-      user: user._id, username: user.name, email: user.email,
-      orderItems: quote.items.map((item) => ({ name: item.name, image: item.image, qty: item.qty, price: item.unitPrice, product_id: item.productId })),
-      shippingAddress: input.shippingAddress, shippingPrice: quote.shippingPrice, totalPrice: quote.total, paymentMethod: "PayPal",
-    });
-    await validateCreation(() => snapshot.validate());
-    try {
-      attempt = await CheckoutAttempt.create({
-        user: user._id, requestId: body.requestId, fingerprint, snapshot: snapshot.toObject(), quote,
-        merchantId: process.env.PAYPAL_MERCHANT_ID,
-        createRequestId: randomUUID(), captureRequestId: randomUUID(), expiresAt: new Date(Date.now() + WINDOW),
-      });
-    } catch (error) {
-      if (error.code !== 11000) throw error;
-      attempt = await CheckoutAttempt.findOne({ user: user._id, requestId: body.requestId });
-      if (!attempt) throw error;
-    }
+  if (typeof body.requestId !== "string" || !/^[A-Za-z0-9_-]{8,100}$/.test(body.requestId)) {
+    throw Object.assign(fail("A valid requestId is required.", 400), { creationRejected: true });
   }
+  const key = { user: user._id, requestId: body.requestId };
+  let attempt = await CheckoutAttempt.findOne(key);
+  if (!attempt) {
+    let decision = await CheckoutRequest.findOne(key);
+    if (!decision) {
+      let candidate, rejection;
+      try {
+        const input = normalizeCheckoutInput(body);
+        if (!Number.isSafeInteger(body.expectedTotal) || body.expectedTotal <= 0) throw fail("A megjelenített ajánlat egész forintban számolt végösszege (expectedTotal) szükséges.", 400);
+        // Only new requests resolve the directory and recalculate prices.
+        const foxpostLocker = input.shippingMethod === "foxpost" ? await resolveFoxpostLocker(input.foxpostLockerId) : undefined;
+        const quote = await calculateOrderPricing(input);
+        if (quote.total !== body.expectedTotal) throw Object.assign(fail("Az ajánlat összege megváltozott. Fogadd el az új összeget a fizetés indításához.", 409), { code: "QUOTE_CHANGED", quote });
+        const snapshot = new Order({
+          user: user._id, username: user.name, email: user.email,
+          orderItems: quote.items.map((item) => ({ name: item.name, image: item.image, qty: item.qty, price: item.unitPrice, product_id: item.productId })),
+          shippingMethod: input.shippingMethod, recipientPhone: input.recipientPhone, foxpostLocker,
+          shippingAddress: foxpostLocker ? lockerShippingAddress(foxpostLocker) : input.shippingAddress, shippingPrice: quote.shippingPrice, totalPrice: quote.total, paymentMethod: "PayPal",
+        });
+        await snapshot.validate();
+        candidate = {
+          fingerprint: createHash("sha256").update(JSON.stringify(input)).digest("hex"), snapshot: snapshot.toObject(), quote,
+          merchantId: process.env.PAYPAL_MERCHANT_ID,
+          createRequestId: randomUUID(), captureRequestId: randomUUID(), expiresAt: new Date(Date.now() + WINDOW),
+        };
+      } catch (error) {
+        const statusCode = error.statusCode || (error.name === "ValidationError" ? 400 : 500);
+        if (![400, 404, 409, 422, 503].includes(statusCode)) throw error;
+        rejection = { message: error.message, statusCode, ...(error.code === "QUOTE_CHANGED" ? { code: error.code, quote: error.quote } : {}) };
+      }
+      // A rejection and a successful snapshot compete for the same durable key.
+      // Persist the winner before responding or making any PayPal request.
+      decision = await decideCreation(key, candidate, rejection);
+    }
+    if (decision.status === "REJECTED") throw Object.assign(fail(decision.rejection.message, decision.rejection.statusCode), decision.rejection.toObject(), { creationRejected: true });
+    attempt = await CheckoutAttempt.findById(decision.checkout);
+    if (!attempt) throw fail("The saved checkout is unavailable. Please retry later.", 503);
+  }
+  const input = normalizeCheckoutInput(body);
+  const fingerprint = createHash("sha256").update(JSON.stringify(input)).digest("hex");
   if (attempt.fingerprint !== fingerprint) throw fail("requestId was already used for different checkout data.", 409);
   if (attempt.status === "CREATING") await processCheckout(attempt._id);
   return CheckoutAttempt.findById(attempt._id);
@@ -115,7 +165,12 @@ export async function ownedCheckout(id, user) {
 }
 export async function checkoutResponse(attempt) {
   const order = attempt.status === "COMPLETED" ? await Order.findOne({ _id: attempt.order, user: attempt.user, checkoutId: attempt._id }) : null;
-  return { checkoutId: attempt._id, id: attempt.paypalOrderId, status: attempt.status, expiresAt: attempt.expiresAt, shippingAddress: attempt.snapshot.shippingAddress, quote: attempt.quote, total: attempt.quote.total, issue: attempt.issue, order };
+  return { checkoutId: attempt._id, id: attempt.paypalOrderId, status: attempt.status, expiresAt: attempt.expiresAt,
+    shippingMethod: attempt.snapshot.shippingMethod || attempt.quote.shippingMethod,
+    recipientPhone: attempt.snapshot.recipientPhone, foxpostLocker: attempt.snapshot.foxpostLocker,
+    foxpostLockerId: attempt.snapshot.foxpostLocker?.place_id,
+    recipientName: attempt.snapshot.username, recipientEmail: attempt.snapshot.email,
+    shippingAddress: attempt.snapshot.shippingAddress, quote: attempt.quote, total: attempt.quote.total, issue: attempt.issue, order };
 }
 
 async function claim(id) {
@@ -143,6 +198,44 @@ export function verifiedCapture(attempt, order) {
   const capture = captures[0];
   if (typeof capture.id !== "string" || !capture.id || !validAmount(capture.amount, attempt.quote.total)) return null;
   return capture;
+}
+
+export async function cancelCheckout(id, user) {
+  requireCheckoutReady();
+  const owned = await ownedCheckout(id, user);
+  if (["FAILED", "EXPIRED"].includes(owned.status)) return owned;
+  if (owned.status !== "READY") throw fail("A fizetés ellenőrzése folyamatban; egyelőre nem módosítható a rendelés.", 409);
+  // Use the same lease as confirmation and the worker: cancellation must win
+  // before reservation/capture, or leave that payment available for recovery.
+  let attempt = await claim(id);
+  if (!attempt) {
+    const current = await ownedCheckout(id, user);
+    if (["FAILED", "EXPIRED"].includes(current.status)) return current;
+    throw fail("A fizetés ellenőrzése folyamatban. Próbáld újra később.", 409);
+  }
+  try {
+    if (attempt.status !== "READY" || attempt.reservation !== "NONE" || attempt.processingStartedAt || attempt.captureAttemptedAt) {
+      throw fail("A fizetés már feldolgozás alatt áll; a rendelés nem módosítható.", 409);
+    }
+    let order;
+    try { order = await provider.getOrder(attempt.paypalOrderId); }
+    catch (_error) { throw fail("A megszakítás nem ellenőrizhető. A fizetés megmaradt; próbáld újra később.", 503); }
+    if (!verifyProviderOrder(attempt, order)) {
+      return await patch(attempt, { status: "REVIEW", issue: "PROVIDER_ORDER_MISMATCH", nextCheckAt: new Date() });
+    }
+    // Even unexpected/manual provider captures are never discarded as cancelled.
+    const captures = order.purchase_units[0].payments?.captures;
+    if (order.status === "COMPLETED" || (captures && (!Array.isArray(captures) || captures.length))) {
+      return await patch(attempt, { status: "REVIEW", issue: "CAPTURE_WITHOUT_RESERVATION", nextCheckAt: new Date() });
+    }
+    if (!["CREATED", "SAVED", "APPROVED", "VOIDED", "PAYER_ACTION_REQUIRED"].includes(order.status)) {
+      return await patch(attempt, { status: "REVIEW", issue: "PAYMENT_REVIEW_REQUIRED", nextCheckAt: new Date() });
+    }
+    attempt = await patch(attempt, { status: "FAILED", issue: "CHECKOUT_CANCELLED" });
+    return attempt;
+  } finally {
+    await CheckoutAttempt.updateOne({ _id: attempt._id, lockToken: attempt.lockToken }, { $unset: { lockToken: "", lockUntil: "" } });
+  }
 }
 
 async function reserve(attempt) {

@@ -33,7 +33,7 @@ const AuthenticatedCheckout = ({ userInfo }) => {
           <Heading fontSize={"2xl"} fontWeight={"extrabold"}>
             Shipping Information
           </Heading>
-          <Stack spacing={"6"}><ShippingInformation lockedCheckout={lockedCheckout} /></Stack>
+          <Stack spacing={"6"}><ShippingInformation lockedCheckout={lockedCheckout} recoveryId={checkout.active?.requestId || checkout.active?.checkoutId} /></Stack>
         </Stack>
         <Flex direction={"column"} align={"center"} flex={"1"}>
           <CheckoutOrderSummary checkout={checkout} onPaymentError={onPaymentError} />

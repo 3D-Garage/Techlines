@@ -12,13 +12,16 @@ const ButtonWrapper = ({
   shippingMethod,
   disabled,
   shippingAddress,
+  foxpostLockerId,
+  recipientPhone,
   checkout,
+  recovery,
 }) => {
   const [{ isPending }] = usePayPalScriptReducer();
   // The SDK keeps callbacks from its initial render. Read the latest form values.
   const values = useRef();
-  values.current = { cart, shippingMethod, shippingAddress, checkout };
   const numericTotal = Number(typeof total === "function" ? total() : total || 0);
+  values.current = { cart, shippingMethod, shippingAddress, foxpostLockerId, recipientPhone, checkout, recovery, disabled, expectedTotal: Math.round(numericTotal) };
 
   return (
     <>
@@ -31,23 +34,26 @@ const ButtonWrapper = ({
         createOrder={async () => {
           try {
             const current = values.current;
+            if (current.disabled) throw new Error("A fizetés indításához ellenőrizd és fogadd el a rendelés adatait.");
             return await current.checkout.create({
                 items: current.cart.map((i) => ({ productId: i.id, qty: i.qty })),
                 shippingMethod: current.shippingMethod,
-                shippingAddress: current.shippingAddress,
-            });
+                expectedTotal: current.expectedTotal,
+                ...(current.shippingMethod === "foxpost" ? { foxpostLockerId: current.foxpostLockerId, recipientPhone: current.recipientPhone } : { shippingAddress: current.shippingAddress }),
+            }, current.recovery);
           } catch (e) {
             onPaymentError(e);
             throw e;
           }
         }}
-        onApprove={async function () {
+        onApprove={async function (data) {
           try {
-            await values.current.checkout.approve();
+            await values.current.checkout.approve(data.orderID);
           } catch (e) {
             onPaymentError(e);
           }
         }}
+        onCancel={async (data) => { await values.current.checkout.cancel(data.orderID); }}
         onError={(err) => {
           onPaymentError(err);
         }}
@@ -56,7 +62,7 @@ const ButtonWrapper = ({
   );
 };
 
-const PayPalButton = ({ total, onPaymentError, cart, shippingMethod, shippingAddress, disabled, checkout }) => {
+const PayPalButton = ({ total, onPaymentError, cart, shippingMethod, shippingAddress, foxpostLockerId, recipientPhone, disabled, checkout, recovery }) => {
   const [clientId, setClientId] = useState("");
   const [loadError, setLoadError] = useState("");
   const borderColor = mode("gray.200", "gray.700");
@@ -108,7 +114,10 @@ const PayPalButton = ({ total, onPaymentError, cart, shippingMethod, shippingAdd
           cart={cart}
           shippingMethod={shippingMethod}
           shippingAddress={shippingAddress}
+          foxpostLockerId={foxpostLockerId}
+          recipientPhone={recipientPhone}
           checkout={checkout}
+          recovery={recovery}
           disabled={disabled}
         />
       </PayPalScriptProvider>

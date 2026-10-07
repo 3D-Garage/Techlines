@@ -4,7 +4,7 @@ import {
   setError,
   cartItemAdd,
   cartItemRemoval,
-  setExpressShipping,
+  setShippingMethod,
   clearCart,
   removePurchasedItems,
 } from "../slices/cart";
@@ -40,6 +40,6 @@ export const removeCartitem = (id) => async (dispatch) => {
   dispatch(cartItemRemoval(id));
 };
 
-export const setExpress = (value) => (dispatch) => dispatch(setExpressShipping(value === true || value === "true"));
+export const selectShippingMethod = (value) => (dispatch) => dispatch(setShippingMethod(value));
 export const resetCart = () => (dispatch) => dispatch(clearCart());
 export const clearPurchasedCartItems = (items) => (dispatch) => dispatch(removePurchasedItems(items));

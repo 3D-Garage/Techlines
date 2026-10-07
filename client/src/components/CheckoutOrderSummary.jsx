@@ -17,33 +17,51 @@ import { PhoneIcon, EmailIcon, ChatIcon } from "@chakra-ui/icons";
 import { useEffect, useState } from "react";
 import CheckoutItem from "./CheckoutItem";
 import PayPalButton from "./PayPalButton";
+import { normalizeRecipientPhone } from "../utils/shipping";
 const CheckoutOrderSummary = ({ checkout, onPaymentError }) => {
   const colorMode = mode("gray.600", "gray.400");
   const cartItems = useSelector((state) => state.cart);
-  const { cart, expressShipping } = cartItems;
+  const { cart, shippingMethod } = cartItems;
   const shippingInfo = useSelector((state) => state.order);
-  const { error, shippingAddress } = shippingInfo;
-  const [buttonDisabled, setButtonDisabled] = useState(true);
+  const user = useSelector((state) => state.user.userInfo);
+  const { error, shippingAddress, recipientPhone, foxpostLocker, foxpostListReady } = shippingInfo;
+  const [quoteError, setQuoteError] = useState("");
+  const [quoteRetry, setQuoteRetry] = useState(0);
+  const [quoteKey, setQuoteKey] = useState(null);
   const [quote, setQuote] = useState({
     items: [],
     subtotal: 0,
-    shippingMethod: expressShipping ? "express" : "standard",
+    shippingMethod,
     shippingPrice: 0,
     total: 0,
     currency: "HUF",
   });
   const toast = useToast();
   const active = checkout.active;
+  const quoteChange = checkout.quoteChange;
   const locked = Boolean(active && !["FAILED", "EXPIRED"].includes(active.status));
   const pending = active && !["READY", "FAILED", "EXPIRED"].includes(active.status);
-  const displayedQuote = locked ? active.quote : quote;
-  const displayedItems = locked ? (active.quote?.items || []).map((item) => ({ ...item, id: item.productId, price: item.unitPrice })) : cart;
+  const inputKey = JSON.stringify({ items: cart.map((item) => ({ productId: item.id, qty: item.qty })), shippingMethod });
+  const changedQuoteKey = quoteChange && JSON.stringify({ items: quoteChange.input.items, shippingMethod: quoteChange.input.shippingMethod });
+  const currentQuote = quoteKey === inputKey ? quote : null;
+  const displayedQuote = locked ? active.quote : currentQuote;
+  const displayedItems = locked ? (active.quote?.items || []).map((item) => ({ ...item, id: item.productId, price: item.unitPrice })) :
+    cart.map((item) => ({ ...item, price: currentQuote?.items.find((quoted) => quoted.productId === item.id)?.unitPrice ?? item.price }));
 
-  const shippingMethod = expressShipping ? "express" : "standard";
+  const buttonDisabled = Boolean(error) || Boolean(quoteChange && !quoteChange.accepted) || cart.length === 0 || !currentQuote?.total ||
+    (shippingMethod === "foxpost" ? !foxpostListReady || !foxpostLocker || !normalizeRecipientPhone(recipientPhone) : !shippingAddress);
 
   useEffect(() => {
     if (locked) return;
+    if (changedQuoteKey === inputKey) {
+      setQuote(quoteChange.quote);
+      setQuoteKey(inputKey);
+      setQuoteError("");
+      return;
+    }
     let isMounted = true;
+    setQuoteKey(null);
+    setQuoteError("");
 
     const fetchQuote = async () => {
       if (!cart.length) {
@@ -62,9 +80,10 @@ const CheckoutOrderSummary = ({ checkout, onPaymentError }) => {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data?.message || "Unable to calculate order quote");
-        if (isMounted) setQuote(data);
+        if (isMounted) { setQuote(data); setQuoteKey(inputKey); }
       } catch (quoteError) {
         if (isMounted) {
+          setQuoteError(quoteError?.message || "Unable to calculate the latest order totals.");
           toast({
             description: quoteError?.message || "Unable to calculate the latest order totals.",
             status: "error",
@@ -79,20 +98,23 @@ const CheckoutOrderSummary = ({ checkout, onPaymentError }) => {
     return () => {
       isMounted = false;
     };
-  }, [cart, shippingMethod, toast, locked]);
-
-  useEffect(() => {
-    setButtonDisabled(Boolean(error) || !shippingAddress || cart.length === 0 || !quote.total);
-  }, [error, shippingAddress, cart.length, quote.total]);
+  }, [cart, shippingMethod, inputKey, toast, locked, quoteRetry, quoteChange, changedQuoteKey, active?.status]);
 
   return (
     <Stack spacing="8" rounded="xl" padding="8" width="full">
       <Heading size="md">Order Summary</Heading>
+      {!locked && quoteChange && !quoteChange.accepted && <Alert status="warning"><AlertIcon /><Box>
+        <Text>Az ajánlat összege megváltozott.</Text>
+        <Text>Korábbi végösszeg: {Number(quoteChange.previousTotal).toLocaleString("hu-HU")} Ft</Text>
+        <Text>Új végösszeg: {Number(quoteChange.quote.total).toLocaleString("hu-HU")} Ft</Text>
+        <Button mt="2" onClick={checkout.acceptQuote}>Új összeg elfogadása</Button>
+      </Box></Alert>}
+      {!locked && quoteError && <Alert status="error"><AlertIcon /><Box><Text>{quoteError}</Text><Button size="sm" onClick={() => setQuoteRetry((value) => value + 1)}>Árajánlat újratöltése</Button></Box></Alert>}
       {locked && <Text>This summary shows the saved payment. Other cart items and additional quantities remain in your cart.</Text>}
       {displayedItems.map((item) => (
         <CheckoutItem key={item.id} cartItem={item} readOnly={locked} />
       ))}
-      {!displayedQuote && <Text>Loading saved payment details...</Text>}
+      {!displayedQuote && <Text>{locked ? "Loading saved payment details..." : "Árajánlat betöltése..."}</Text>}
       {displayedQuote && <Stack spacing="6">
         <Flex justify="space-between">
           <Text fontWeight="medium" color={colorMode}>
@@ -131,6 +153,7 @@ const CheckoutOrderSummary = ({ checkout, onPaymentError }) => {
           {active.shippingAddress && <Text>Szállítás: {active.shippingAddress.address}, {active.shippingAddress.postalCode} {active.shippingAddress.city}, {active.shippingAddress.country}</Text>}
           {active.total && <Text>Rögzített összeg: {active.total.toLocaleString("hu-HU")} Ft</Text>}
         </Box></Alert>}
+        {active?.status === "READY" && <Button isLoading={checkout.cancelling} loadingText="Megszakítás ellenőrzése" onClick={() => checkout.cancel()}>Rendelés módosítása</Button>}
         {active && ["FAILED", "EXPIRED"].includes(active.status) && <Button onClick={checkout.reset}>Új fizetés előkészítése</Button>}
         <Box display={!pending && (!active || active.status === "READY") ? "block" : "none"}>
           <PayPalButton
@@ -138,9 +161,14 @@ const CheckoutOrderSummary = ({ checkout, onPaymentError }) => {
             cart={displayedItems}
             shippingMethod={locked ? active.quote?.shippingMethod : shippingMethod}
             shippingAddress={locked ? active.shippingAddress : shippingAddress}
+            foxpostLockerId={locked ? active.foxpostLockerId || active.foxpostLocker?.place_id : foxpostLocker?.place_id}
+            recipientPhone={locked ? active.recipientPhone : recipientPhone}
             checkout={checkout}
+            recovery={{ quote: displayedQuote, shippingMethod, recipientName: user.name, recipientEmail: user.email,
+              ...(shippingMethod === "foxpost" ? { foxpostLocker, recipientPhone,
+                shippingAddress: foxpostLocker && { address: foxpostLocker.street, city: foxpostLocker.city, postalCode: foxpostLocker.postalCode, country: foxpostLocker.country } } : { shippingAddress }) }}
             onPaymentError={onPaymentError}
-            disabled={pending || (active?.status === "READY" ? !active.quote : buttonDisabled)}
+            disabled={checkout.cancelling || pending || (active?.status === "READY" ? !active.quote : buttonDisabled)}
           />
         </Box>
       </Stack>

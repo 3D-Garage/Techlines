@@ -9,6 +9,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link as ReactLink, Navigate, useLocation } from "react-router-dom";
 import { getProducts } from "../redux/actions/productAction";
 import axios from "axios";
+import OrderShippingDetails from "../components/OrderShippingDetails";
 import {
   createAdminProduct, deleteAdminProduct, deleteOrder, deleteUser, getAllOrders, getAllUsers,
   removeReview, setDelivered, updateAdminProduct,
@@ -131,7 +132,7 @@ const AdminConsoleScreen = () => {
             <TableContainer><Table size="sm"><Thead><Tr><Th>Date</Th><Th>Customer</Th><Th>Address</Th><Th>Items</Th><Th isNumeric>Total</Th><Th>Status</Th><Th /></Tr></Thead>
               <Tbody>{orders.map((order) => <Tr key={order._id}>
                 <Td>{new Date(order.createdAt).toLocaleDateString()}</Td><Td>{order.username}<br /><Text fontSize="xs">{order.email}</Text></Td>
-                <Td>{order.shippingAddress.address}, {order.shippingAddress.postalCode} {order.shippingAddress.city}, {order.shippingAddress.country}</Td>
+                <Td><OrderShippingDetails order={order} admin /></Td>
                 <Td>{order.orderItems.map((item) => <Text key={item._id}>{item.qty} × {item.name}</Text>)}</Td><Td isNumeric>{Number(order.totalPrice).toLocaleString("hu-HU")} Ft</Td>
                 <Td><Badge colorScheme={order.isDelivered ? "green" : "purple"}>{order.isDelivered ? "Delivered" : "Processing"}</Badge></Td>
                 <Td>{!order.isDelivered && <Button size="xs" colorScheme="purple" mr="2" isDisabled={order.paymentStatus !== "COMPLETED" || !order.checkoutId} onClick={() => run(setDelivered(order._id), "Order marked delivered.")}>Delivered</Button>}<Button size="xs" colorScheme="red" variant="outline" onClick={() => askAndRun("Archive this order?", deleteOrder(order._id), "Order archived.")}>Archive</Button></Td>

@@ -7,7 +7,7 @@ A full-stack 3D-printing webshop built with React, Chakra UI, Redux Toolkit, Exp
 - product catalogue, product details and shopping cart
 - registration, login and editable customer profile
 - PayPal checkout with server-side order creation and capture
-- shipping address and standard/express delivery select
+- shipping address and standard/express/FOXPOST locker delivery select
 - product reviews (one review per customer and product)
 - customer order history
 - protected admin console for users, products, reviews and orders
@@ -34,6 +34,8 @@ The setup requires Node.js 20 or newer (including the SMTP mail dependency). It 
 - seeds a local admin account and sample products.
 
 The generated admin credentials are printed at the end and stored in the local `.env`. PayPal checkout stays disabled until PayPal Sandbox client credentials and PAYPAL_MERCHANT_ID are added and MongoDB is configured as a replica set. The setup preserves an existing `.env`; use `npm run setup:dev -- -Force` to back it up and generate a replacement.
+
+`npm run app` watches backend source files and restarts the server when they change. Use `npm run server:dev` for the backend alone with automatic restart, or `npm run server` for a normal server process. If the checkout shows a newly added shipping method but the API returns `Unsupported shipping method` or a missing endpoint, restart an older backend process that was started before these changes.
 
 ### Manual setup
 
@@ -78,6 +80,8 @@ npm test --prefix client -- --watchAll=false --runInBand
 npm run build --prefix client
 npm run test:browser
 ```
+
+FOXPOST locker checkout with manual parcel dispatch is documented in [FOXPOST checkout](docs/FOXPOST.md), including the directory API, recovery behavior and live widget acceptance check.
 
 Catalog checkout uses a durable, owner-bound payment attempt, frozen server prices/address,
 transactional inventory reservation and restart reconciliation. Old unpaid/capture endpoints

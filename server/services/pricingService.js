@@ -1,9 +1,10 @@
 import { validateInventory } from "./inventoryService.js";
 
-export const SUPPORTED_SHIPPING_METHODS = new Set(["standard", "express"]);
+export const SUPPORTED_SHIPPING_METHODS = new Set(["standard", "express", "foxpost"]);
 
 const SHIPPING_FEE_BY_METHOD = {
   standard: (subtotal) => (subtotal >= 10000 ? 0 : 1490),
+  foxpost: (subtotal) => (subtotal >= 10000 ? 0 : 1490),
   express: () => 3990,
 };
 
@@ -45,7 +46,11 @@ export async function calculateOrderPricing({ items = [], shippingMethod }) {
 
   const shippingPrice = SHIPPING_FEE_BY_METHOD[shippingMethod](subtotal);
   const total = subtotal + shippingPrice;
-  if (!Number.isSafeInteger(total) || total <= 0) throw new Error("Invalid order total");
+  if (!Number.isSafeInteger(total) || total <= 0) {
+    const error = new Error("Invalid order total");
+    error.statusCode = 422;
+    throw error;
+  }
 
   return {
     items: normalizedItems,

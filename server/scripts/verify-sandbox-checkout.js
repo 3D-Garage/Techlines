@@ -37,7 +37,7 @@ try {
   __setPayPalService({ ...paypal, createOrder: (payload) => paypal.createOrder({ ...payload, returnUrl: receiptServer.returnUrl, cancelUrl: receiptServer.cancelUrl }) });
   const product = await Product.create({ name: "Sandbox security acceptance", image: "/favicon.png", brand: "Test", category: "Test", description: "Isolated Sandbox acceptance", price: 1000, stock: 1 });
   const user = { _id: new mongoose.Types.ObjectId(), name: "Sandbox Test Customer", email: "sandbox-test@example.com" };
-  checkout = await createCheckout(user, { requestId: randomUUID(), items: [{ productId: String(product._id), qty: 1 }], shippingMethod: "standard",
+  checkout = await createCheckout(user, { requestId: randomUUID(), expectedTotal: 2490, items: [{ productId: String(product._id), qty: 1 }], shippingMethod: "standard",
     shippingAddress: { address: "Sandbox utca 1", city: "Budapest", postalCode: "1111", country: "HU" } });
   if (!checkout.paypalOrderId) throw new Error("Sandbox order creation is pending or failed; rerun after checking configuration");
   const paypalOrder = await paypal.getOrder(checkout.paypalOrderId);
