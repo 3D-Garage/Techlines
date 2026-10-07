@@ -102,8 +102,10 @@ export default function useCheckout({ userId, token, onSuccess, onError }) {
       successRef.current(data.order);
       return;
     }
-    // A concurrent status GET may arrive just before the confirmation POST.
-    const status = previous.status === "PROCESSING" && data.status === "READY" ? "PROCESSING" : data.status;
+    // Concurrent responses must not move a checkout backwards (READY < PROCESSING < REVIEW).
+    const rank = { READY: 0, PROCESSING: 1, REVIEW: 2 };
+    const stale = previous.status in rank && data.status in rank && rank[data.status] < rank[previous.status];
+    const status = stale ? previous.status : data.status;
     persist({ ...previous, ...data, status });
     persistQuoteChange(null);
   }, [persist, persistQuoteChange, userId]);
