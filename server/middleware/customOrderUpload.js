@@ -1,8 +1,11 @@
 import multer from "multer";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import { chmod, open, readFile, unlink } from "node:fs/promises";
-import { getCustomOrderConfig, prepareCustomOrderUploadDirectory, SUPPORTED_MODEL_EXTENSIONS } from "../config/customOrders.js";
+import { getCustomOrderConfig, SUPPORTED_MODEL_EXTENSIONS } from "../config/customOrders.js";
+import { reserveCustomOrderStorage, releaseCustomOrderStorage } from "../services/customOrderStorage.js";
 
 const MIME_TYPES = {
   ".stl": "model/stl",
@@ -210,27 +213,46 @@ export async function validateModelFile(file, maxFileSizeBytes) {
 }
 
 export async function removeCustomOrderFile(file) {
-  if (!file?.path) return;
-  try {
-    await unlink(file.path);
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
+  if (file?.path) {
+    try { await unlink(file.path); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
   }
+  await releaseCustomOrderStorage(file);
 }
 
 export function createCustomOrderUpload(overrides = {}) {
   return async (req, res, next) => {
     try {
       const config = { ...getCustomOrderConfig(), ...overrides };
-      const storage = multer.diskStorage({
-        destination(_req, _file, callback) {
-          prepareCustomOrderUploadDirectory(config.uploadDir)
-            .then((directory) => callback(null, directory), callback);
+      const storage = {
+        _handleFile(request, file, callback) {
+          (async () => {
+            file.filename = `${randomUUID()}${file.extension}`;
+            const { directory, reservation } = await reserveCustomOrderStorage(config, file.filename);
+            file.quotaReservation = reservation;
+            file.path = path.join(directory, file.filename);
+            const controller = new AbortController();
+            const abort = () => controller.abort();
+            request.once("aborted", abort);
+            if (request.aborted) abort();
+            const output = createWriteStream(file.path, { flags: "wx", mode: 0o600 });
+            try {
+              await pipeline(file.stream, output, { signal: controller.signal });
+              return { path: file.path, filename: file.filename, size: output.bytesWritten,
+                quotaReservation: reservation, expiresAt: new Date(Date.now() + config.retentionMs) };
+            } finally {
+              request.off("aborted", abort);
+            }
+          })().then((info) => callback(null, info), async (error) => {
+            try { await removeCustomOrderFile(file); }
+            catch { console.error("Custom order interrupted upload cleanup failed."); }
+            callback(error);
+          });
         },
-        filename(_req, file, callback) {
-          callback(null, `${randomUUID()}${file.extension}`);
+        _removeFile(_request, file, callback) {
+          removeCustomOrderFile(file).then(() => callback(null), callback);
         },
-      });
+      };
       const upload = multer({
         storage,
         defParamCharset: "utf8",

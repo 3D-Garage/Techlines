@@ -279,6 +279,8 @@ test("upload size limit is enforced and unsuccessful request uploads are cleaned
   assert.doesNotMatch(await databaseFailure.text(), /Database connection secret|stack|Mongo/);
   assert.equal(h.records.size, 0);
   assert.deepEqual(await readdir(h.directory), []);
+  h.Order.failCreate = false;
+  assert.equal((await h.upload()).status, 201, "rejected uploads must release quota for later requests");
 });
 
 test("a failed email preserves both the accepted request and uploaded file", async (t) => {

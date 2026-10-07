@@ -16,8 +16,8 @@ const genToken = (id) => {
 
 // Async function for handling user login, including user and password validation. Sends a JSON response with user data and a generated token if the credentials are valid, otherwise throws an error.
 const loginUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
+  const { email, password } = req.body || {};
+  if (typeof email !== "string" || !email.trim() || typeof password !== "string" || !password) {
     res.status(400);
     throw new Error("Email and password are required");
   }

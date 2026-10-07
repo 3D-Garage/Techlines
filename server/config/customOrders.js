@@ -24,7 +24,17 @@ export function getCustomOrderConfig(env = process.env) {
   if (uploadDir === path.resolve(projectRoot) || forbiddenRoots.some((root) => isWithin(uploadDir, path.join(projectRoot, root)))) {
     throw new Error("Custom order uploads must be stored outside web and source-control directories.");
   }
-  return { uploadDir, maxFileSizeBytes, supportedExtensions: [...SUPPORTED_MODEL_EXTENSIONS] };
+  const quotaMb = Number(env.CUSTOM_ORDER_STORAGE_QUOTA_MB || 1024);
+  const retentionDays = Number(env.CUSTOM_ORDER_FILE_RETENTION_DAYS || 30);
+  const storageQuotaBytes = Math.floor(quotaMb * 1024 * 1024);
+  const retentionMs = Math.floor(retentionDays * 24 * 60 * 60 * 1000);
+  if (!Number.isSafeInteger(storageQuotaBytes) || storageQuotaBytes < maxFileSizeBytes) {
+    throw new Error("CUSTOM_ORDER_STORAGE_QUOTA_MB must cover at least one maximum-size file.");
+  }
+  if (!Number.isSafeInteger(retentionMs) || retentionMs < 1) {
+    throw new Error("CUSTOM_ORDER_FILE_RETENTION_DAYS must be a positive duration.");
+  }
+  return { uploadDir, maxFileSizeBytes, storageQuotaBytes, retentionMs, supportedExtensions: [...SUPPORTED_MODEL_EXTENSIONS] };
 }
 
 // Lexical checks alone cannot detect a private-looking symlink/junction into a
