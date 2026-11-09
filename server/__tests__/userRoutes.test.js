@@ -57,7 +57,7 @@ test("registerUser rejects duplicate email", async () => {
   User.findOne = async ({ email }) => (email === dupe.email ? dupe : null);
   const { req, res, next } = mockReqRes({ name: "X", email: "x@example.com", password: "abcdef" });
   await registerUser(req, res, next);
-  assert.equal(res.statusCode, 400);
+  assert.equal(res.nextErr?.statusCode, 400);
   assert.ok(res.nextErr instanceof Error);
 });
 
@@ -87,7 +87,7 @@ test("registerUser creates a valid user and loginUser rejects bad credentials", 
   const badLogin = mockReqRes({ email: "missing@example.com", password: "wrong" });
   User.findOne = async () => null;
   await loginUser(badLogin.req, badLogin.res, badLogin.next);
-  assert.equal(badLogin.res.statusCode, 401);
+  assert.equal(badLogin.res.nextErr?.statusCode, 401);
 });
 
 test("updateUserProfile, getUserOrders, getUsers, and deleteUser cover admin and ownership guardrails", async () => {

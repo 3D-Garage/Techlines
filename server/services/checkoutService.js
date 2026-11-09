@@ -1,3 +1,4 @@
+import HttpError from "./HttpError.js";
 import mongoose from "mongoose";
 import { createHash, randomUUID } from "node:crypto";
 import validator from "validator";
@@ -16,9 +17,9 @@ const terminal = new Set(["COMPLETED", "FAILED", "EXPIRED"]);
 let ready = false;
 let provider = paypal;
 export const __setPayPalService = (service) => { provider = service || paypal; };
-const fail = (message, statusCode) => Object.assign(new Error(message), { statusCode });
+const fail = (message, statusCode) => new HttpError(message, statusCode);
 export function requireCheckoutReady() {
-  if (!ready || mongoose.connection.readyState !== 1) throw fail("Checkout is unavailable: transaction-capable database and payment configuration are required.", 503);
+  if (!ready || mongoose.connection.readyState !== 1) throw fail("Checkout is temporarily unavailable.", 503);
 }
 
 // Never drop existing indexes. Detect collisions before adding any unique index.
@@ -137,9 +138,13 @@ export async function createCheckout(user, body = {}) {
           createRequestId: randomUUID(), captureRequestId: randomUUID(), expiresAt: new Date(Date.now() + WINDOW),
         };
       } catch (error) {
-        const statusCode = error.statusCode || (error.name === "ValidationError" ? 400 : 500);
-        if (![400, 404, 409, 422, 503].includes(statusCode)) throw error;
-        rejection = { message: error.message, statusCode, ...(error.code === "QUOTE_CHANGED" ? { code: error.code, quote: error.quote } : {}) };
+        if (error instanceof mongoose.Error.ValidationError) {
+          rejection = { message: "Invalid order data.", statusCode: 400 };
+        } else {
+          if (!(error instanceof HttpError) || ![400, 404, 409, 422, 503].includes(error.statusCode)) throw error;
+          rejection = { message: error.message, statusCode: error.statusCode,
+            ...(error.code === "QUOTE_CHANGED" ? { code: error.code, quote: error.quote } : {}) };
+        }
       }
       // A rejection and a successful snapshot compete for the same durable key.
       // Persist the winner before responding or making any PayPal request.

@@ -20,9 +20,10 @@ test("legacy unpaid orders cannot be delivered", async () => {
   const find = Order.findById;
   Order.findById = async () => ({ paymentStatus: "PENDING" });
   try {
-    const response = res();
-    await assert.rejects(setDelivered({ params: { id: "order" } }, response, null), /verified paid/);
-    assert.equal(response.statusCode, 409);
+    await assert.rejects(setDelivered({ params: { id: "order" } }, res(), null), {
+      statusCode: 409,
+      message: /verified paid/,
+    });
   } finally { Order.findById = find; }
 });
 test("checkout validates country, postal code, quantities and request key", () => {

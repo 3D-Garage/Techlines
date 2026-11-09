@@ -1,7 +1,9 @@
+import HttpError from "../services/HttpError.js";
 import express from "express";
 import User from "../models/User.js";
 import asyncHandler from "express-async-handler";
 import jwt from "jsonwebtoken";
+import validator from "validator";
 import protectRoute from "../middleware/autMiddleware.js";
 import { admin } from "../middleware/autMiddleware.js";
 import Order from "../models/Order.js";
@@ -18,8 +20,7 @@ const genToken = (id) => {
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
   if (typeof email !== "string" || !email.trim() || typeof password !== "string" || !password) {
-    res.status(400);
-    throw new Error("Email and password are required");
+    throw new HttpError("Email and password are required", 400);
   }
   const user = await User.findOne({ email });
   if (user && (await user.matchPasswords(password))) {
@@ -32,81 +33,92 @@ const loginUser = asyncHandler(async (req, res) => {
       createdAt: user.createdAt,
     });
   } else {
-    res.status(401);
-    throw new Error("Invalid email or password");
+    throw new HttpError("Invalid email or password", 401);
   }
 });
 
-//POST register user
+function readAccountFields(body, required = false) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new HttpError("Invalid account data.", 400);
+  }
+
+  const fields = {};
+  if (required || Object.hasOwn(body, "name")) {
+    if (typeof body.name !== "string" || !body.name.trim() || /[\x00-\x1f\x7f]/.test(body.name)) {
+      throw new HttpError("A valid name is required.", 400);
+    }
+    fields.name = body.name.trim();
+  }
+  if (required || Object.hasOwn(body, "email")) {
+    if (typeof body.email !== "string" || !validator.isEmail(body.email.trim())) {
+      throw new HttpError("A valid email is required.", 400);
+    }
+    fields.email = body.email.trim();
+  }
+  if (required || Object.hasOwn(body, "password")) {
+    if (typeof body.password !== "string" || body.password.length < 6 || !body.password.trim()) {
+      throw new HttpError("Password must be at least 6 characters.", 400);
+    }
+    fields.password = body.password;
+  }
+  return fields;
+}
+
+const duplicateEmail = () => new HttpError("We already have an account with that email address.", 400);
+
 const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body;
-  if (!name || !email || !password) {
-    res.status(400);
-    throw new Error("Name, email and password are required");
-  }
-  if (typeof password !== "string" || password.length < 6) {
-    res.status(400);
-    throw new Error("Password must be at least 6 characters");
+  const fields = readAccountFields(req.body, true);
+  if (await User.findOne({ email: fields.email })) throw duplicateEmail();
+  let user;
+  try {
+    user = await User.create(fields);
+  } catch (error) {
+    if (error.code === 11000) throw duplicateEmail();
+    throw error;
   }
 
-  const userExists = await User.findOne({ email });
-  if (userExists) {
-    res.status(400);
-    throw new Error("we already have an account with that email adress.");
-  }
-  const user = await User.create({
-    name,
-    email,
-    password,
+  res.status(201).json({
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    isAdmin: user.isAdmin,
+    token: genToken(user._id),
   });
-
-  if (user) {
-    res.status(201).json({
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      isAdmin: user.isAdmin,
-      token: genToken(user._id),
-    });
-  } else {
-    res.status(500);
-    throw new Error("Invalid user data.");
-  }
 });
 
 const updateUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (user) {
-    // Ensure user can only update own profile unless admin
-    if (req.user && req.user._id && req.user._id.toString() !== req.params.id && !req.user.isAdmin) {
-      res.status(403);
-      throw new Error("Forbidden");
-    }
-    user.name = req.body.name || user.name;
-    user.email = req.body.email || user.email;
-    if (req.body.password) {
-      user.password = req.body.password;
-    }
-    const updatedUser = await user.save();
-
-    res.json({
-      _id: updatedUser._id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-      isAdmin: updatedUser.isAdmin,
-      token: genToken(updatedUser._id),
-      createdAt: updatedUser.createdAt,
-    });
-  } else {
-    res.status(404);
-    throw new Error("User not found.");
+  if (req.user._id.toString() !== req.params.id && !req.user.isAdmin) {
+    throw new HttpError("Forbidden", 403);
   }
+
+  const fields = readAccountFields(req.body);
+  const user = await User.findById(req.params.id);
+  if (!user) {
+    throw new HttpError("User not found.", 404);
+  }
+
+  Object.assign(user, fields);
+  let updatedUser;
+  try {
+    updatedUser = await user.save();
+  } catch (error) {
+    if (error.code === 11000) throw duplicateEmail();
+    throw error;
+  }
+
+  res.json({
+    _id: updatedUser._id,
+    name: updatedUser.name,
+    email: updatedUser.email,
+    isAdmin: updatedUser.isAdmin,
+    token: genToken(updatedUser._id),
+    createdAt: updatedUser.createdAt,
+  });
 });
 
 const getUserOrders = asyncHandler(async (req, res) => {
   if (req.user._id.toString() !== req.params.id && !req.user.isAdmin) {
-    res.status(404);
-    throw new Error("Orders not found.");
+    throw new HttpError("Orders not found.", 404);
   }
 
   const orders = await Order.find({ user: req.params.id, archivedAt: { $exists: false } }).sort({ createdAt: -1 });
@@ -120,14 +132,12 @@ const getUsers = asyncHandler(async (_req, res) => {
 
 const deleteUser = asyncHandler(async (req, res) => {
   if (req.user._id.toString() === req.params.id) {
-    res.status(400);
-    throw new Error("You cannot remove your own admin account.");
+    throw new HttpError("You cannot remove your own admin account.", 400);
   }
 
   const user = await User.findByIdAndDelete(req.params.id);
   if (!user) {
-    res.status(404);
-    throw new Error("User not found.");
+    throw new HttpError("User not found.", 404);
   }
   res.json({ _id: user._id });
 });

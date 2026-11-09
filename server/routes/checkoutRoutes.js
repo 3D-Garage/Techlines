@@ -1,3 +1,4 @@
+import HttpError from "../services/HttpError.js";
 import express from "express";
 import asyncHandler from "express-async-handler";
 import mongoose from "mongoose";
@@ -15,7 +16,7 @@ export const cancelCheckoutHandler = asyncHandler(async (req, res) => {
 export const pendingCheckouts = asyncHandler(async (_req, res) => res.json(await CheckoutAttempt.find({ status: { $in: ["CREATING", "PROCESSING", "REVIEW"] } })
   .select("user status reservation paypalOrderId processingStartedAt nextCheckAt issue createdAt").sort({ createdAt: 1 })));
 export const reconcileCheckout = asyncHandler(async (req, res) => {
-  if (!mongoose.isValidObjectId(req.params.id) || !await CheckoutAttempt.exists({ _id: req.params.id })) { res.status(404); throw new Error("Checkout not found."); }
+  if (!mongoose.isValidObjectId(req.params.id) || !await CheckoutAttempt.exists({ _id: req.params.id })) { throw new HttpError("Checkout not found.", 404); }
   // Admin can inspect provider evidence, but cannot initiate/retry a capture.
   await processCheckout(req.params.id, { queryOnly: true });
   res.json(await checkoutResponse(await CheckoutAttempt.findById(req.params.id)));

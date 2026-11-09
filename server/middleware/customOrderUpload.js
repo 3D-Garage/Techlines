@@ -1,3 +1,4 @@
+import HttpError from "../services/HttpError.js";
 import multer from "multer";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -27,7 +28,7 @@ const objCommands = new Set([
 ]);
 
 function uploadError(message, status = 400) {
-  return Object.assign(new Error(message), { status, errors: { modelFile: message } });
+  return Object.assign(new HttpError(message, status), { errors: { modelFile: message } });
 }
 
 // Iterate instead of splitting the whole upload into arrays. Empty lines and
@@ -224,9 +225,19 @@ export function createCustomOrderUpload(overrides = {}) {
   return async (req, res, next) => {
     try {
       const config = { ...getCustomOrderConfig(), ...overrides };
+      let pendingFile;
+      let write;
+      let removal;
+      const removeUpload = async () => {
+        if (!pendingFile) return;
+        // A malformed stream can reach Multer's error callback before the storage write settles.
+        removal ??= write.catch(() => {}).then(() => removeCustomOrderFile(pendingFile));
+        await removal;
+      };
       const storage = {
         _handleFile(request, file, callback) {
-          (async () => {
+          pendingFile = file;
+          write = (async () => {
             file.filename = `${randomUUID()}${file.extension}`;
             const { directory, reservation } = await reserveCustomOrderStorage(config, file.filename);
             file.quotaReservation = reservation;
@@ -243,19 +254,22 @@ export function createCustomOrderUpload(overrides = {}) {
             } finally {
               request.off("aborted", abort);
             }
-          })().then((info) => callback(null, info), async (error) => {
-            try { await removeCustomOrderFile(file); }
+          })();
+          write.then((info) => callback(null, info), async (error) => {
+            try { await removeUpload(); }
             catch { console.error("Custom order interrupted upload cleanup failed."); }
             callback(error);
           });
         },
-        _removeFile(_request, file, callback) {
-          removeCustomOrderFile(file).then(() => callback(null), callback);
+        _removeFile(_request, _file, callback) {
+          removeUpload().then(() => callback(null), callback);
         },
       };
       const upload = multer({
         storage,
         defParamCharset: "utf8",
+        // Validate path separators before Multer can reduce the name to a basename.
+        preservePath: true,
         limits: { fileSize: config.maxFileSizeBytes, files: 1, fields: 7, parts: 8, fieldNameSize: 100, fieldSize: 40000, fieldArrayIndexLimit: 0 },
         fileFilter(_req, file, callback) {
           const originalName = file.originalname.normalize("NFC");
@@ -280,7 +294,7 @@ export function createCustomOrderUpload(overrides = {}) {
               const tooLarge = error.code === "LIMIT_FILE_SIZE";
               throw uploadError(tooLarge ? "A modellfájl meghaladja a megengedett méretet." : "Érvénytelen feltöltés: legfeljebb egy modellfájl és a megadott űrlapmezők küldhetők.", tooLarge ? 413 : 400);
             }
-            if (error.status) throw error;
+            if (error instanceof HttpError) throw error;
             // Malformed multipart bodies also use controlled errors.
             if (/multipart|unexpected end/i.test(error.message)) throw uploadError("Hiányos vagy érvénytelen fájlfeltöltés.");
             throw error;
@@ -291,7 +305,7 @@ export function createCustomOrderUpload(overrides = {}) {
           }
           next();
         })().catch(async (failure) => {
-          try { await removeCustomOrderFile(req.file); }
+          try { await removeUpload(); }
           catch { console.error("Custom order rejected upload cleanup failed."); }
           next(failure);
         });

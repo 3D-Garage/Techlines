@@ -1,6 +1,7 @@
 import express from "express";
 import rateLimit from "./middleware/rateLimit.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
+import { mountStorefront } from "./middleware/storefront.js";
 
 import productRoutes from "./routes/productRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -10,8 +11,23 @@ import checkoutRoutes from "./routes/checkoutRoutes.js";
 import shippingRoutes from "./routes/shippingRoutes.js";
 import customOrderRoutes from "./routes/customOrderRoutes.js";
 
-export function createApp() {
+function corsOrigin() {
+  const configured = process.env.CORS_ORIGIN?.trim();
+  if (process.env.NODE_ENV !== "production") return configured || "*";
+
+  try {
+    const url = new URL(configured);
+    if (url.protocol === "https:" && url.origin === configured && !url.hostname.includes("*")) return configured;
+  } catch {
+    // A missing or invalid origin fails startup in production.
+  }
+  throw new Error("CORS_ORIGIN must be an explicit HTTPS origin in production.");
+}
+
+export function createApp({ storefrontDirectory, cspMode = process.env.STOREFRONT_CSP_MODE || "enforce" } = {}) {
+  const allowedOrigin = corsOrigin();
   const app = express();
+  app.disable("x-powered-by");
 
   app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
@@ -21,11 +37,13 @@ export function createApp() {
     next();
   });
 
-  app.use((req, res, next) => {
-    const allowedOrigin = process.env.CORS_ORIGIN || "*";
-    res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  app.use("/api", (req, res, next) => {
+    if (allowedOrigin !== "*") res.vary("Origin");
+    if (allowedOrigin === "*" || req.get("Origin") === allowedOrigin) {
+      res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
     if (req.method === "OPTIONS") return res.sendStatus(204);
     next();
   });
@@ -47,6 +65,10 @@ export function createApp() {
   app.use("/api/shipping", shippingRoutes);
   app.use("/api/paypal", paypalRoutes);
 
+  if (storefrontDirectory) {
+    app.use("/api", notFound);
+    mountStorefront(app, storefrontDirectory, cspMode);
+  }
   app.use(notFound);
   app.use(errorHandler);
 

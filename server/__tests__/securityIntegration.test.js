@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
@@ -13,8 +16,8 @@ const USER_ID = "507f1f77bcf86cd799439011";
 const OTHER_USER_ID = "507f1f77bcf86cd799439012";
 const ADMIN_ID = "507f1f77bcf86cd799439013";
 
-async function startApp(t) {
-  const app = createApp();
+async function startApp(t, options) {
+  const app = createApp(options);
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   t.after(() => new Promise((resolve, reject) => {
@@ -62,7 +65,7 @@ test("security headers and configured CORS origin are returned on real HTTP resp
   });
 
   const baseUrl = await startApp(t);
-  const response = await fetch(`${baseUrl}/api/paypal/client-id`);
+  const response = await fetch(`${baseUrl}/api/paypal/client-id`, { headers: { Origin: process.env.CORS_ORIGIN } });
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
@@ -70,6 +73,16 @@ test("security headers and configured CORS origin are returned on real HTTP resp
   assert.equal(response.headers.get("referrer-policy"), "no-referrer");
   assert.equal(response.headers.get("x-xss-protection"), "0");
   assert.equal(response.headers.get("access-control-allow-origin"), "https://shop.example.test");
+  assert.equal(response.headers.get("x-powered-by"), null);
+  assert.match(response.headers.get("vary"), /Origin/i);
+
+  for (const [origin, allowed] of [["https://shop.example.test", "https://shop.example.test"], ["https://other.example.test", null]]) {
+    const preflight = await fetch(`${baseUrl}/api/paypal/client-id`, {
+      method: "OPTIONS", headers: { Origin: origin, "Access-Control-Request-Method": "GET" },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), allowed);
+  }
 });
 
 test("protected endpoints reject missing, malformed and expired JWTs without leaking token internals", async (t) => {
@@ -287,4 +300,166 @@ test("login brute-force threshold returns 429 after the configured limit", async
 
   assert.equal(response.status, 429);
   assert.match((await response.json()).message, /too many requests/i);
+});
+
+test("production refuses missing, wildcard or invalid CORS origins", (t) => {
+  const previous = { NODE_ENV: process.env.NODE_ENV, CORS_ORIGIN: process.env.CORS_ORIGIN };
+  t.after(() => {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  process.env.NODE_ENV = "production";
+  for (const origin of [undefined, "*", "http://shop.example.test", "https://*.example.test", "https://shop.example.test/api"]) {
+    if (origin === undefined) delete process.env.CORS_ORIGIN;
+    else process.env.CORS_ORIGIN = origin;
+    assert.throws(() => createApp(), /CORS_ORIGIN must be an explicit HTTPS origin/);
+  }
+  process.env.CORS_ORIGIN = "https://shop.example.test";
+  assert.doesNotThrow(() => createApp());
+});
+
+test("storefront documents carry a fresh CSP nonce, API misses stay JSON and report-only is explicit", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "techlines-storefront-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(join(directory, "index.html"), "<html><head></head><body>Storefront</body></html>");
+  const base = await startApp(t, { storefrontDirectory: directory, cspMode: "enforce" });
+
+  const nonces = new Set();
+  for (const path of ["/", "/checkout", "/index.html"]) {
+    const result = await fetch(base + path);
+    const csp = result.headers.get("content-security-policy");
+    assert.equal(result.status, 200);
+    assert.equal(result.headers.get("cache-control"), "no-store");
+    assert.match(csp, /frame-ancestors 'none'/);
+    assert.match(csp, /frame-src [^;]*https:\/\/cdn\.foxpost\.hu/);
+    assert.doesNotMatch(csp, /script-src [^;]*unsafe-inline/);
+    const nonce = /'nonce-([^']+)'/.exec(csp)[1];
+    nonces.add(nonce);
+    assert.ok((await result.text()).includes(`name="csp-nonce" nonce="${nonce}"`));
+  }
+  assert.equal(nonces.size, 3);
+
+  const apiMiss = await fetch(base + "/api/missing");
+  assert.equal(apiMiss.status, 404);
+  assert.deepEqual(await apiMiss.json(), { message: "Not Found" });
+  const assetMiss = await fetch(base + "/static/js/missing.js");
+  assert.equal(assetMiss.status, 404);
+
+  const reportOnly = await startApp(t, { storefrontDirectory: directory, cspMode: "report-only" });
+  const report = await fetch(reportOnly);
+  assert.equal(report.headers.get("content-security-policy"), null);
+  assert.ok(report.headers.has("content-security-policy-report-only"));
+});
+
+test("global JSON parser returns safe 400 and 413 responses before the route runs", async (t) => {
+  const find = t.mock.method(User, "findOne", () => assert.fail("Parser error reached the route"));
+  const base = await startApp(t);
+  for (const [body, status, message] of [
+    ['{"private":secret}', 400, "Érvénytelen JSON kérés."],
+    [JSON.stringify({ private: "secret".repeat(20000) }), 413, "A kérés meghaladja a megengedett méretet."],
+  ]) {
+    const response = await fetch(base + "/api/users/login", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body,
+    });
+    assert.equal(response.status, status);
+    assert.deepEqual(await response.json(), { message });
+  }
+  assert.equal(find.mock.callCount(), 0);
+});
+
+test("the exact Bearer scheme is case-insensitive and rejects suffixes or extra credentials", async (t) => {
+  const find = t.mock.method(User, "findById", () => ({ select: async () => authUser(ADMIN_ID, { isAdmin: true }) }));
+  t.mock.method(User, "find", () => ({ select: () => ({ sort: async () => [] }) }));
+  const base = await startApp(t);
+  const token = tokenFor(ADMIN_ID);
+  for (const authorization of [`BearerForged ${token}`, `Bearer ${token} extra`, `Bearer ${token}, Bearer ${token}`]) {
+    const response = await fetch(base + "/api/users", { headers: { authorization } });
+    assert.equal(response.status, 401);
+  }
+  assert.equal(find.mock.callCount(), 0);
+  const response = await fetch(base + "/api/users", { headers: { authorization: `bEaReR  ${token}` } });
+  assert.equal(response.status, 200);
+  assert.equal(find.mock.callCount(), 1);
+});
+
+test("register and profile reject invalid shapes before lookup or persistence", async (t) => {
+  const lookup = t.mock.method(User, "findOne", () => assert.fail("Invalid email reached User.findOne"));
+  const create = t.mock.method(User, "create", () => assert.fail("Invalid registration reached User.create"));
+  const findById = t.mock.method(User, "findById", () => ({ select: async () => authUser(USER_ID) }));
+  const base = await startApp(t);
+  const account = { name: "Test user", email: "test@example.com", password: "test-password" };
+  const invalid = [
+    { email: { $ne: null } }, { email: [] }, { email: "invalid" }, { name: "   " },
+    { name: {} }, { password: [] }, { password: "      " }, { password: "" },
+  ];
+  for (const fields of invalid) {
+    const registration = await fetch(base + "/api/users/register", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...account, ...fields }),
+    });
+    assert.equal(registration.status, 400);
+    const profile = await fetch(base + "/api/users/profile/" + USER_ID, {
+      method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenFor(USER_ID)}` },
+      body: JSON.stringify(fields),
+    });
+    assert.equal(profile.status, 400);
+  }
+  assert.equal(lookup.mock.callCount(), 0);
+  assert.equal(create.mock.callCount(), 0);
+  assert.equal(findById.mock.callCount(), invalid.length, "only the auth lookup should run");
+});
+
+test("a concurrent duplicate registration uses the same safe error as a known email", async (t) => {
+  const duplicateError = Object.assign(new Error("E11000 db.users email private@example.com"), { code: 11000 });
+  const user = authUser(USER_ID);
+  let known = false;
+  t.mock.method(User, "findOne", async () => known ? user : null);
+  let attempted = false;
+  const create = t.mock.method(User, "create", async () => {
+    if (attempted) throw duplicateError;
+    attempted = true;
+    return user;
+  });
+  const base = await startApp(t);
+  const register = () => fetch(base + "/api/users/register", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: user.name, email: user.email, password: "test-password" }),
+  });
+  const results = await Promise.all([register(), register()]);
+  assert.deepEqual(results.map(({ status }) => status).sort(), [201, 400]);
+  assert.equal(create.mock.callCount(), 2);
+  known = true;
+  const duplicate = await register();
+  assert.equal(duplicate.status, 400);
+  const raceBody = await results.find(({ status }) => status === 400).json();
+  assert.deepEqual(raceBody, await duplicate.json());
+  assert.doesNotMatch(JSON.stringify(raceBody), /E11000|db\.users|private@example/);
+});
+
+test("profile updates can omit the password and unexpected database errors stay private", async (t) => {
+  const hash = await bcrypt.hash("existing-password", 4);
+  const user = User.hydrate({ _id: USER_ID, name: "Old name", email: "old@example.com", password: hash });
+  t.mock.method(User, "findById", () => ({ select: async () => authUser(USER_ID), then: (resolve) => resolve(user) }));
+  const write = t.mock.method(User.collection, "updateOne", async () => ({ matchedCount: 1 }));
+  t.mock.method(User, "findOne", async () => { throw new Error("private database connection data"); });
+  const base = await startApp(t);
+  const response = await fetch(base + "/api/users/profile/" + USER_ID, {
+    method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tokenFor(USER_ID)}` },
+    body: JSON.stringify({ name: " New name ", isAdmin: true }),
+  });
+  assert.equal(response.status, 200);
+  const profile = await response.json();
+  assert.equal(profile.name, "New name");
+  assert.equal(profile.email, "old@example.com");
+  assert.equal(profile.isAdmin, false);
+  assert.equal(user.password, hash);
+  assert.equal(write.mock.calls[0].arguments[1].$set.password, undefined);
+
+  const failure = await fetch(base + "/api/users/login", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "test@example.com", password: "test-password" }),
+  });
+  assert.equal(failure.status, 500);
+  assert.deepEqual(await failure.json(), { message: "Server Error" });
 });

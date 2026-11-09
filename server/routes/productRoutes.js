@@ -1,3 +1,4 @@
+import HttpError from "../services/HttpError.js";
 import express from "express";
 import Product from "../models/Product.js";
 import asyncHandler from "express-async-handler";
@@ -15,32 +16,28 @@ const getProduct = asyncHandler(async (req, res) => {
   if (product && !product.archivedAt) {
     res.json(product);
   } else {
-    res.status(404);
-    throw new Error("Product not found");
+    throw new HttpError("Product not found", 404);
   }
 });
 
 const createProductReview = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) {
-    res.status(404);
-    throw new Error("Product not found.");
+    throw new HttpError("Product not found.", 404);
   }
 
   const alreadyReviewed = product.reviews.some(
     (review) => review.user.toString() === req.user._id.toString()
   );
   if (alreadyReviewed) {
-    res.status(400);
-    throw new Error("You have already reviewed this product.");
+    throw new HttpError("You have already reviewed this product.", 400);
   }
 
   const rating = Number(req.body.rating);
   const comment = String(req.body.comment || "").trim();
   const title = String(req.body.title || "Review").trim();
   if (!Number.isInteger(rating) || rating < 1 || rating > 5 || !comment) {
-    res.status(400);
-    throw new Error("A rating from 1 to 5 and a comment are required.");
+    throw new HttpError("A rating from 1 to 5 and a comment are required.", 400);
   }
 
   product.reviews.push({ name: req.user.name, rating, comment, title, user: req.user._id });
@@ -52,7 +49,7 @@ const createProductReview = asyncHandler(async (req, res) => {
 
 const createProduct = asyncHandler(async (req, res) => {
   for (const field of ["price", "stock"]) {
-    if (!Number.isSafeInteger(Number(req.body[field])) || Number(req.body[field]) < 0) { res.status(400); throw new Error("Price and stock must be nonnegative integers."); }
+    if (!Number.isSafeInteger(Number(req.body[field])) || Number(req.body[field]) < 0) { throw new HttpError("Price and stock must be nonnegative integers.", 400); }
   }
   const product = await Product.create({
     name: req.body.name,
@@ -70,12 +67,11 @@ const createProduct = asyncHandler(async (req, res) => {
 const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
   if (!product) {
-    res.status(404);
-    throw new Error("Product not found.");
+    throw new HttpError("Product not found.", 404);
   }
 
   const version = req.body.inventoryVersion;
-  if (!Number.isSafeInteger(version) || version < 0) { res.status(409); throw new Error("Reload the product before editing its inventory."); }
+  if (!Number.isSafeInteger(version) || version < 0) { throw new HttpError("Reload the product before editing its inventory.", 409); }
   const changes = {};
   for (const field of ["name", "image", "brand", "category", "description"]) {
     if (req.body[field] !== undefined) changes[field] = req.body[field];
@@ -83,7 +79,7 @@ const updateProduct = asyncHandler(async (req, res) => {
   for (const field of ["price", "stock"]) {
     if (req.body[field] !== undefined) {
       const value = Number(req.body[field]);
-      if (!Number.isSafeInteger(value) || value < 0) { res.status(400); throw new Error("Price and stock must be nonnegative integers."); }
+      if (!Number.isSafeInteger(value) || value < 0) { throw new HttpError("Price and stock must be nonnegative integers.", 400); }
       changes[field] = value;
     }
   }
@@ -91,15 +87,14 @@ const updateProduct = asyncHandler(async (req, res) => {
   const versionFilter = version === 0 ? { $or: [{ inventoryVersion: 0 }, { inventoryVersion: { $exists: false } }] } : { inventoryVersion: version };
   const updatedProduct = await Product.findOneAndUpdate({ _id: product._id, archivedAt: { $exists: false }, ...versionFilter },
     { $set: changes, $inc: { inventoryVersion: 1 } }, { new: true, runValidators: true });
-  if (!updatedProduct) { res.status(409); throw new Error("Product changed. Reload before saving."); }
+  if (!updatedProduct) { throw new HttpError("Product changed. Reload before saving.", 409); }
   res.json(updatedProduct);
 });
 
 const deleteProduct = asyncHandler(async (req, res) => {
   const product = await Product.findByIdAndUpdate(req.params.id, { $set: { archivedAt: new Date(), available: false }, $inc: { inventoryVersion: 1 } }, { new: true });
   if (!product) {
-    res.status(404);
-    throw new Error("Product not found.");
+    throw new HttpError("Product not found.", 404);
   }
   res.json({ _id: product._id });
 });
@@ -107,8 +102,7 @@ const deleteProduct = asyncHandler(async (req, res) => {
 const removeProductReview = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.productId);
   if (!product) {
-    res.status(404);
-    throw new Error("Product not found.");
+    throw new HttpError("Product not found.", 404);
   }
 
   const previousCount = product.reviews.length;
@@ -116,8 +110,7 @@ const removeProductReview = asyncHandler(async (req, res) => {
     (review) => review._id.toString() !== req.params.reviewId
   );
   if (product.reviews.length === previousCount) {
-    res.status(404);
-    throw new Error("Review not found.");
+    throw new HttpError("Review not found.", 404);
   }
   product.numberOfReviews = product.reviews.length;
   product.rating = product.reviews.length

@@ -53,14 +53,15 @@ This document describes the security measures currently implemented in the Techl
 
 - HTTP hardening and request limits
 
-  - Body size limit: `express.json({ limit: '100kb' })` in `server/index.js` to mitigate large payload attacks.
+  - JSON requests are limited to 100 KB. Malformed and oversized requests return controlled 400 and 413 responses.
   - Security headers (minimal, no external deps)
     - `X-Content-Type-Options: nosniff`
     - `X-Frame-Options: DENY`
     - `Referrer-Policy: no-referrer`
-    - `X-XSS-Protection: 0` (modern guidance; prefer CSP — see TODO)
+    - `X-XSS-Protection: 0`
+    - Express framework disclosure is disabled.
   - CORS control
-    - `Access-Control-Allow-Origin` set from `CORS_ORIGIN` (defaults to `*`). (See TODO to restrict to known domains.)
+    - Production requires one explicit HTTPS `CORS_ORIGIN`. Browsers receive the allow-origin header only when their origin matches.
 
 - Data model fixes and consistency
 
@@ -89,7 +90,7 @@ This document describes the security measures currently implemented in the Techl
 - Required environment variables
   - `MONGO_URI`, `TOKEN_SECRET`, `PORT`
   - PayPal: `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_MERCHANT_ID`, optional `PAYPAL_BASE_URL` (defaults to sandbox)
-  - `CORS_ORIGIN` for allowed frontend origin
+  - `CORS_ORIGIN` for the allowed frontend origin. Use an HTTPS origin without a trailing slash in production.
 - The public PayPal client ID is fetched from `/api/paypal/client-id`. The client secret is server-only.
 
 ## Verified by Tests
@@ -103,17 +104,14 @@ This document describes the security measures currently implemented in the Techl
 
 - Rate limiting is an in-memory stopgap and not distributed; use a production-ready limiter.
 - No comprehensive input validation schema yet (IDs, shapes, value ranges) — see TODO.
-- CSP header is not set; current headers reduce some risk but do not prevent all XSS vectors.
+- Validate the storefront CSP against the actual staging deployment and external checkout integrations before release.
 
 ## TODO Roadmap (Prioritized)
 
 High priority
 
 - Replace in-memory rate limiter with `express-rate-limit` (or Redis-backed limiter) and add per-account lockout on repeated login failures.
-- Add `helmet` for comprehensive, battle-tested security headers. Include a strong Content Security Policy (CSP) tailored to the app and PayPal SDK domains.
-- Restrict CORS to explicit production/staging domains rather than `*`.
 - Add robust input validation with `celebrate/Joi` or `express-validator` for:
-  - Auth (email format, password policy)
   - Order payloads (ObjectId validation, qty ranges, shipping fields)
   - PayPal endpoints (items array schema, shippingPrice numeric bounds)
 - Shorten JWT access token lifetime and introduce refresh token rotation, with server-side revocation (e.g., on password change/logout).
@@ -123,13 +121,12 @@ Medium priority
 - Add PayPal webhooks for reconciliation (`PAYMENT.CAPTURE.COMPLETED`), signature verification, and idempotency handling.
 - Implement role-based access control (RBAC) scaffolding for future admin endpoints.
 - Add detailed audit logging and request correlation IDs; centralize logs.
-- Improve error messages (do not leak internal details), standardize error responses.
 - Validate and sanitize outbound emails/notifications (if added later).
 
 Low priority
 
-- Password policy enforcement (minimum length, complexity, breach checks via k-Anonymity API).
-- Add CSP report-only mode, then enforce; add security.txt.
+- Evaluate password complexity and breach checks.
+- Add security.txt.
 - Add automated dependency scanning and runtime vulnerability alerts.
 - Document data retention and privacy policy (GDPR considerations for EU users).
 
@@ -139,6 +136,22 @@ Low priority
 - Keep `TOKEN_SECRET`, PayPal secrets, and `MONGO_URI` in a secure secret store (not in source control)!!!!!
 - Configure process restarts and health checks; in-memory limiter resets on restart.
 - Monitor 4xx/5xx, rate-limit hits, and unusual payment activity. This might be overkill
+
+### Storefront CSP
+
+Build the React client with `npm ci --prefix client` and `npm run build --prefix client`.
+Set `NODE_ENV=production`, `CORS_ORIGIN=https://your-store.example` and
+`SERVE_STOREFRONT=true`. Point the HTTPS reverse proxy at Express for the storefront
+and `/api`. Express serves `client/build` and adds CSP to each HTML document with
+a fresh PayPal script nonce. Forward the CSP header and keep the document's
+`Cache-Control: no-store` behavior through the proxy. Chakra UI still uses inline styles.
+
+For staging, start with `STOREFRONT_CSP_MODE=report-only` and inspect violations
+in the browser console while running a PayPal Sandbox purchase and selecting a
+FOXPOST locker. Switch to `STOREFRONT_CSP_MODE=enforce` (the default) and repeat
+both flows against the deployed URL. Confirm the enforced header on the HTML
+response. Use the Express storefront to enable this policy, or configure the HTML
+host to supply an equivalent per-response nonce and CSP.
 
 ## How to Run Tests
 

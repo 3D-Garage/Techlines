@@ -1,3 +1,4 @@
+import HttpError from "../services/HttpError.js";
 import express from "express";
 import asyncHandler from "express-async-handler";
 import Order from "../models/Order.js";
@@ -19,23 +20,23 @@ export const confirmOrder = asyncHandler(async (req, res) => {
 });
 export const getOrders = asyncHandler(async (_req, res) => res.json(await Order.find({ archivedAt: { $exists: false } }).sort({ createdAt: -1 })));
 export const getOrder = asyncHandler(async (req, res) => {
-  if (!mongoose.isValidObjectId(req.params.id)) { res.status(404); throw new Error("Order not found."); }
+  if (!mongoose.isValidObjectId(req.params.id)) { throw new HttpError("Order not found.", 404); }
   const order = await Order.findOne({ _id: req.params.id, user: req.user._id });
-  if (!order) { res.status(404); throw new Error("Order not found."); }
+  if (!order) { throw new HttpError("Order not found.", 404); }
   res.json(order);
 });
 export const deleteOrder = asyncHandler(async (req, res) => {
   const order = await Order.findByIdAndUpdate(req.params.id, { $set: { archivedAt: new Date() } }, { new: true });
-  if (!order) { res.status(404); throw new Error("Order not found."); }
+  if (!order) { throw new HttpError("Order not found.", 404); }
   res.json({ _id: order._id });
 });
 export const setDelivered = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id);
-  if (!order) { res.status(404); throw new Error("Order not found."); }
+  if (!order) { throw new HttpError("Order not found.", 404); }
   const proof = order.checkoutId && await CheckoutAttempt.findOne({ _id: order.checkoutId, user: order.user, order: order._id,
     status: "COMPLETED", paypalOrderId: order.paypalOrderId, paypalCaptureId: order.paypalCaptureId });
   if (order.archivedAt || order.paymentStatus !== "COMPLETED" || !order.paidAt || !order.paypalOrderId || !order.paypalCaptureId || !proof) {
-    res.status(409); throw new Error("Only a verified paid catalog order can be delivered.");
+    throw new HttpError("Only a verified paid catalog order can be delivered.", 409);
   }
   order.isDelivered = true;
   order.deliveredAt = new Date();
