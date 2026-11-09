@@ -1,11 +1,11 @@
 import mongoose from "mongoose";
+import HttpError from "./HttpError.js";
 import Product from "../models/Product.js";
 
-export class InventoryError extends Error {
+export class InventoryError extends HttpError {
   constructor(message, statusCode = 400, code = "INVENTORY_ERROR") {
-    super(message);
+    super(message, statusCode);
     this.name = "InventoryError";
-    this.statusCode = statusCode;
     this.code = code;
   }
 }
@@ -15,7 +15,8 @@ export const normalizeInventoryProductId = (productId) => {
     throw new InventoryError("Missing product ID.", 400, "INVALID_PRODUCT_ID");
   }
 
-  const normalizedId = typeof productId === "string" ? productId.trim() : String(productId);
+  const normalizedId = typeof productId === "string" ? productId.trim()
+    : mongoose.isObjectIdOrHexString(productId) ? productId.toHexString() : "";
   if (!/^[a-f\d]{24}$/i.test(normalizedId)) {
     throw new InventoryError("Invalid product ID.", 400, "INVALID_PRODUCT_ID");
   }
@@ -24,7 +25,7 @@ export const normalizeInventoryProductId = (productId) => {
 };
 
 export const normalizeInventoryQuantity = (qty) => {
-  const quantity = Number(qty);
+  const quantity = typeof qty === "string" && /^\d+$/.test(qty.trim()) ? Number(qty) : qty;
 
   if (!Number.isSafeInteger(quantity) || quantity <= 0) {
     throw new InventoryError("Invalid quantity.", 400, "INVALID_QUANTITY");

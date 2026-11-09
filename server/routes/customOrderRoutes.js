@@ -1,3 +1,5 @@
+import HttpError from "../services/HttpError.js";
+import { errorHandler } from "../middleware/errorMiddleware.js";
 import express from "express";
 import asyncHandler from "express-async-handler";
 import path from "node:path";
@@ -13,7 +15,7 @@ import { releaseCustomOrderStorage, storedModelFilename } from "../services/cust
 
 const supportedExtensions = [".stl", ".obj", ".step", ".stp"];
 
-const requestError = (status, message) => Object.assign(new Error(message), { status });
+const requestError = (status, message) => new HttpError(message, status);
 
 // Whitelisting keeps private filesystem names and future internal fields out of API responses.
 const adminOrder = (order) => ({
@@ -191,25 +193,7 @@ export function createCustomOrderRouter({
     res.json(adminOrder(order));
   }));
 
-  router.use((error, _req, res, next) => {
-    if (res.headersSent) return next(error);
-    if (error.type === "entity.parse.failed" || error.type === "entity.too.large") {
-      const status = error.type === "entity.too.large" ? 413 : 400;
-      const message = status === 413 ? "A kérés meghaladja a megengedett méretet." : "Érvénytelen JSON kérés.";
-      return res.status(status).json({ message });
-    }
-    const explicitStatus = Number(error.status || error.statusCode);
-    const responseStatus = res.statusCode >= 400 && res.statusCode < 500 ? res.statusCode : 500;
-    const controlledError = (explicitStatus >= 400 && explicitStatus < 500) || [503, 507].includes(explicitStatus);
-    const status = controlledError ? explicitStatus : responseStatus;
-    const fallback = status === 401 ? "Bejelentkezés szükséges."
-      : status === 403 ? "Adminisztrátori jogosultság szükséges."
-        : "A kérés feldolgozása sikertelen. Kérjük, próbálja újra később.";
-    const message = controlledError ? error.message : fallback;
-    const body = { message };
-    if ([400, 413, 415].includes(status) && error.errors && typeof error.errors === "object") body.errors = error.errors;
-    res.status(status).json(body);
-  });
+  router.use(errorHandler);
 
   return router;
 }

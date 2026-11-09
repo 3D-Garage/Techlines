@@ -98,6 +98,31 @@ async function setup(page, { active = null, completed = false } = {}) {
   await page.goto("/checkout");
   return state;
 }
+test("storefront CSP blocks inline scripts and allows the PayPal SDK and FOXPOST frame", async ({ page }) => {
+  const document = page.waitForResponse((response) => new URL(response.url()).pathname === "/checkout" && response.request().isNavigationRequest());
+  await setup(page);
+  const csp = (await document).headers()["content-security-policy"];
+  const nonce = /'nonce-([^']+)'/.exec(csp)[1];
+  await expect(page.getByRole("button", { name: "Test PayPal approval" })).toBeVisible();
+  await expect(page.locator('script[src^="https://www.paypal.com/sdk/js"]')).toHaveAttribute("data-csp-nonce", nonce);
+
+  const violation = await page.evaluate(() => new Promise((resolve) => {
+    window.addEventListener("securitypolicyviolation", ({ effectiveDirective, blockedURI }) => {
+      if (blockedURI === "inline") resolve({ effectiveDirective, ran: window.untrustedScriptRan ?? false });
+    });
+    const script = window.document.createElement("script");
+    script.textContent = "window.untrustedScriptRan = true;";
+    window.document.body.appendChild(script);
+  }));
+  expect(violation).toEqual({ effectiveDirective: "script-src-elem", ran: false });
+
+  await page.getByText("FOXPOST csomagautomata", { exact: true }).click();
+  await page.getByRole("button", { name: "Automata választása", exact: true }).click();
+  await page.frameLocator('iframe[title="FOXPOST térképes és listás automataválasztó"]')
+    .getByRole("button", { name: "Select A-BOX" }).press("Enter");
+  await expect(page.getByText(locker.name, { exact: true })).toBeVisible();
+});
+
 test("uses the webshop address, keeps cart on 202, and resumes polling after reload", async ({ page }) => {
   const state = await setup(page);
   await page.locator('input[name="address"]').fill(address.address);

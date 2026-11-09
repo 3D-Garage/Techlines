@@ -1,3 +1,4 @@
+import HttpError from "./HttpError.js";
 import path from "node:path";
 import { mkdir, readdir, readFile, writeFile, lstat, unlink, rmdir } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
@@ -20,7 +21,7 @@ async function withStorageLock(directory, action) {
     try { await mkdir(lock, { mode: 0o700 }); break; }
     catch (error) {
       if (error.code !== "EEXIST") throw error;
-      if (Date.now() >= deadline) throw Object.assign(new Error("Upload storage is busy."), { status: 503 });
+      if (Date.now() >= deadline) throw new HttpError("Upload storage is busy.", 503);
       await delay(10);
     }
   }
@@ -74,7 +75,7 @@ export async function reserveCustomOrderStorage(config, filename) {
       if (stats?.isFile()) used += stats.size;
     }
     if (used + config.maxFileSizeBytes > config.storageQuotaBytes) {
-      throw Object.assign(new Error("Upload storage quota exceeded."), { status: 507 });
+      throw new HttpError("Upload storage quota exceeded.", 507);
     }
     await writeFile(reservation, JSON.stringify({ filename, bytes: config.maxFileSizeBytes }), { flag: "wx", mode: 0o600 });
   });

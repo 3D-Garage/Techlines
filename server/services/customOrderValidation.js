@@ -1,3 +1,4 @@
+import HttpError from "./HttpError.js";
 import validator from "validator";
 
 export const CUSTOM_ORDER_STATUSES = Object.freeze([
@@ -19,8 +20,7 @@ export function normalizeCustomOrderText(value) {
 }
 
 function validationError(errors) {
-  const error = new Error("Kérjük, ellenőrizze a megadott adatokat.");
-  error.status = 400;
+  const error = new HttpError("Kérjük, ellenőrizze a megadott adatokat.", 400);
   error.errors = { ...errors };
   return error;
 }

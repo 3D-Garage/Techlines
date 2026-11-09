@@ -1,6 +1,7 @@
+import HttpError from "./HttpError.js";
 export const FOXPOST_LIST_URL = "https://cdn.foxpost.hu/foxplus.json";
 const CACHE_TTL = 60 * 60 * 1000;
-const fail = (message, statusCode) => Object.assign(new Error(message), { statusCode });
+const fail = (message, statusCode) => new HttpError(message, statusCode);
 
 export function normalizeRecipientPhone(value) {
   if (typeof value !== "string" || value.length > 40 || !/^[+\d\s()-]+$/.test(value)) throw fail("Adj meg érvényes magyar mobiltelefonszámot.", 400);

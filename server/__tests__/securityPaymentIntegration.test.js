@@ -1,6 +1,9 @@
 import { before, after, beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { fork } from "node:child_process";
+import express from "express";
+import asyncHandler from "express-async-handler";
 import { resolve } from "node:path";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
@@ -16,6 +19,7 @@ import { createFoxpostDirectory, __setFoxpostDirectory } from "../services/foxpo
 
 // Exercise the production Express stack, real JWTs, indexes, transactions and
 // schema validation. Only external PayPal/FOXPOST transport is replaced.
+const databaseName = `security_payment_${process.pid}`;
 const address = { address: "Webshop utca 1", city: "Budapest", postalCode: "1111", country: "HU" };
 const point = { place_id: 12345, operator_id: "hu123", variant: "FOXPOST A-BOX", country: "HU", name: "QA locker", address: "1111 Budapest, Automata utca 2.", street: "Automata utca 2.", city: "Budapest", zip: "1111", service: ["pick up"], load: "normal loaded" };
 let mongo, server, base, owner, other, admin, product, orders, calls, createKeys, captureKeys, mutateCapture, malformedCreation;
@@ -53,7 +57,7 @@ before(async () => {
   process.env.PAYPAL_CLIENT_SECRET = "qa-secret";
   process.env.PAYPAL_MERCHANT_ID = "qa-merchant";
   mongo = await MongoMemoryReplSet.create({ binary: { downloadDir: resolve(".test-artifacts/mongodb") }, replSet: { count: 1, storageEngine: "wiredTiger" } });
-  await mongoose.connect(mongo.getUri(), { dbName: `security_payment_${process.pid}`, autoIndex: false });
+  await mongoose.connect(mongo.getUri(), { dbName: databaseName, autoIndex: false });
   await Product.createCollection();
   await User.createCollection();
   await initializeCheckout();
@@ -89,8 +93,8 @@ after(async () => {
   if (mongo) await mongo.stop();
 });
 
-async function api(path, { user = owner, body, method = body ? "POST" : "GET" } = {}) {
-  const response = await fetch(`${base}${path}`, {
+async function api(path, { user = owner, body, method = body ? "POST" : "GET", origin = base } = {}) {
+  const response = await fetch(`${origin}${path}`, {
     method, headers: { "content-type": "application/json", ...(user ? { authorization: `Bearer ${jwt.sign({ id: String(user._id) }, process.env.TOKEN_SECRET)}` } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
@@ -104,6 +108,53 @@ async function create(extra = {}) {
 }
 const approve = (attempt) => { orders.get(attempt.id).status = "APPROVED"; };
 const confirm = (attempt, user = owner) => api("/api/orders/confirm", { user, body: { checkoutId: attempt.checkoutId } });
+async function usePayPalRest(t) {
+  const paypal = express();
+  paypal.use(express.json());
+  paypal.post("/v1/oauth2/token", (_req, res) => res.json({ access_token: "test-access-token" }));
+  paypal.post("/v2/checkout/orders", asyncHandler(async (req, res) => {
+    const unit = req.body.purchase_units[0];
+    const data = await provider.createOrder({
+      requestId: req.get("PayPal-Request-Id"), referenceId: unit.reference_id,
+      merchantId: unit.payee.merchant_id, total: Number(unit.amount.value),
+    });
+    res.status(201).json({ ...data, debug_id: "private-provider-debug-id" });
+  }));
+  paypal.get("/v2/checkout/orders/:id", asyncHandler(async (req, res) => res.json(await provider.getOrder(req.params.id))));
+  paypal.post("/v2/checkout/orders/:id/capture", asyncHandler(async (req, res) =>
+    res.json(await provider.captureOrder(req.params.id, req.get("PayPal-Request-Id")))));
+  const mock = paypal.listen(0, "127.0.0.1");
+  await once(mock, "listening");
+
+  const previousUrl = process.env.PAYPAL_BASE_URL;
+  process.env.PAYPAL_BASE_URL = `http://127.0.0.1:${mock.address().port}`;
+  __setPayPalService(null);
+  t.after(async () => {
+    if (previousUrl === undefined) delete process.env.PAYPAL_BASE_URL;
+    else process.env.PAYPAL_BASE_URL = previousUrl;
+    mock.closeAllConnections();
+    await new Promise((resolve) => mock.close(resolve));
+  });
+}
+
+async function startSecondCheckoutApp(t) {
+  const child = fork(new URL("./fixtures/securityCheckoutServer.js", import.meta.url), [], {
+    env: { ...process.env, QA_MONGO_URI: mongo.getUri(), QA_MONGO_DATABASE: databaseName },
+  });
+  t.after(async () => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    const exited = once(child, "exit");
+    if (child.connected) child.disconnect();
+    await exited;
+  });
+  const [{ url, error }] = await Promise.race([
+    once(child, "message"),
+    once(child, "exit").then(([code]) => { throw new Error(`Checkout app exited before startup (${code})`); }),
+  ]);
+  assert.ok(url, error);
+  return url;
+}
+
 async function noPaymentEffects() {
   assert.equal(await Order.countDocuments(), 0);
   assert.equal((await Product.findById(product._id)).stock, 3);
@@ -146,7 +197,11 @@ for (const shippingMethod of ["teleport", { $ne: null }]) {
 
 for (const [label, override, status] of [
   ["operator product ID", { items: [{ productId: { $ne: null }, qty: 1 }] }, 400],
-  ["fractional quantity", { items: [{ qty: 1.5 }] }, 400],
+  ["fractional quantity", { items: [{ productId: "507f1f77bcf86cd799439011", qty: 1.5 }] }, 400],
+  ["array product ID", { items: [{ productId: ["507f1f77bcf86cd799439011"], qty: 1 }] }, 400],
+  ["non-stringifiable product ID", { items: [{ productId: { toString: "invalid" }, qty: 1 }] }, 400],
+  ["boolean quantity", { items: [{ productId: "507f1f77bcf86cd799439011", qty: true }] }, 400],
+  ["array quantity", { items: [{ productId: "507f1f77bcf86cd799439011", qty: [1] }] }, 400],
   ["unsupported shipping", { shippingMethod: "teleport" }, 400],
   ["operator shipping", { shippingMethod: { $ne: null } }, 400],
   ["incomplete address", { shippingAddress: { country: "HU" } }, 400],
@@ -202,20 +257,42 @@ test("a forged displayed total returns QUOTE_CHANGED before payment or reservati
   assert.equal(await CheckoutAttempt.countDocuments(), 0);
 });
 
-test("provider create response without an ID stays recoverable and reuses the saved request identity", async () => {
-  malformedCreation = true;
-  const first = await api("/api/paypal/create-order", { body: input() });
-  assert.equal(first.status, 202);
-  assert.equal(first.body.status, "CREATING");
-  assert.equal(first.body.id, undefined);
-  assert.equal(await CheckoutAttempt.countDocuments(), 1);
-  assert.equal(await Order.countDocuments(), 0);
-  assert.equal((await Product.findById(product._id)).stock, 3);
-  malformedCreation = false;
-  const resumed = await create();
-  assert.equal(resumed.checkoutId, first.body.checkoutId);
-  assert.equal(calls.create[0].requestId, calls.create[1].requestId);
-  assert.equal(await CheckoutAttempt.countDocuments(), 1);
+for (const transport of ["service fixture", "REST adapter"]) {
+  test(`provider create response without an ID stays recoverable through the ${transport}`, async (t) => {
+    if (transport === "REST adapter") await usePayPalRest(t);
+    malformedCreation = true;
+    const first = await api("/api/paypal/create-order", { body: input() });
+    assert.equal(first.status, 202);
+    assert.equal(first.body.status, "CREATING");
+    assert.equal(first.body.id, undefined);
+    assert.doesNotMatch(JSON.stringify(first.body), /private-provider-debug-id/);
+    assert.equal(await CheckoutAttempt.countDocuments(), 1);
+    assert.equal(await Order.countDocuments(), 0);
+    assert.equal((await Product.findById(product._id)).stock, 3);
+    malformedCreation = false;
+    const resumed = await create();
+    assert.equal(resumed.checkoutId, first.body.checkoutId);
+    assert.equal(calls.create[0].requestId, calls.create[1].requestId);
+    assert.equal(await CheckoutAttempt.countDocuments(), 1);
+  });
+}
+
+test("two independent app processes can confirm the same checkout without a duplicate capture", async (t) => {
+  await usePayPalRest(t);
+  const secondOrigin = await startSecondCheckoutApp(t);
+  const attempt = await create();
+  approve(attempt);
+
+  const path = "/api/orders/confirm";
+  const body = { checkoutId: attempt.checkoutId };
+  const confirmations = await Promise.all([api(path, { body }), api(path, { body, origin: secondOrigin })]);
+  assert.ok(confirmations.every(({ status }) => status === 200 || status === 202), JSON.stringify(confirmations));
+  const replay = await api(path, { body, origin: secondOrigin });
+  assert.equal(replay.status, 200);
+  assert.equal(replay.body.paymentStatus, "COMPLETED");
+  assert.equal(calls.capture.length, 1);
+  assert.equal(await Order.countDocuments(), 1);
+  assert.equal((await Product.findById(product._id)).stock, 2);
 });
 
 test("HTTP concurrent confirmation and owned/archived replays produce one schema-valid order and consume inventory once", async () => {

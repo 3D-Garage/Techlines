@@ -69,7 +69,7 @@ export const updateProfile = (id, name, email, password) => async (dispatch, get
         "Content-Type": "application/json",
       },
     };
-    const { data } = await axios.put(`/api/users/profile/${id}`, { _id: id, name, email, password }, config);
+    const { data } = await axios.put(`/api/users/profile/${id}`, { name, email, ...(password ? { password } : {}) }, config);
     localStorage.setItem("userInfo", JSON.stringify(data));
     dispatch(updateUserProfile(data));
   } catch (error) {

@@ -40,6 +40,6 @@ test("protectRoute attaches req.user for valid token", async () => {
 test("protectRoute rejects missing/invalid token", async () => {
   const { req, res, next } = createMockReqRes({});
   await protectRoute(req, res, next);
-  assert.equal(res.statusCode, 401);
+  assert.equal(res.nextErr?.statusCode, 401);
   assert.ok(res.nextErr instanceof Error);
 });

@@ -51,13 +51,26 @@ Full-suite coverage reports **95.01% lines, 92.13% branches and 94.70% functions
 
 For historical context, the previous QA evidence on 2026-10-04 reported 111 passing/35 failing server checks. Those numbers used the retired payment contract and must not be treated as the current result. Replacing retired-flow assertions with the new contract explains much of the change in failure counts; it is not a claim that this QA PR repaired production payment code.
 
-## Coordination and limits
+## Coordination and limits of PR #25
 
 #24's implementation now supplies checkout ownership, durable payment recovery and inventory safety. The migrated QA checks retain those security outcomes instead of expecting creation/capture through retired endpoints or treating PayPal email as ownership.
 
 #26 also describes broader parser/error sanitization, bearer syntax, upload filename, CORS/CSP and deployment hardening work. This rebase does not claim comprehensive new coverage or remediation for every item in that issue. The login fixture uses a matching account password and does not demonstrate passwordless login. DOM checks run in jsdom and are not a complete browser/CSP audit.
 
 This payment HTTP file exercises concurrency against one local app and a real replica set. Additional checkout/inventory suites remain in both full and focused runs; that payment file does not itself simulate multiple app processes or restarts. Upload quota coverage separately starts two app processes sharing one upload directory.
+
+## Issue #26 follow-up
+
+The follow-up covers registration and profile input, duplicate-email write races,
+exact Bearer syntax, safe API errors, raw multipart filenames and production CORS.
+It also exercises the production storefront CSP in Playwright. The browser tests
+use deterministic PayPal and FOXPOST fixtures. Run the separate staging acceptance
+in [Storefront CSP](../SECURITY.md#storefront-csp) with the real integrations.
+
+The payment integration suite now also tests a malformed create response through
+the real REST adapter and concurrent confirmations against two independent app
+processes using one MongoDB replica set. A missing provider order ID returns a
+recoverable `202` and reuses the persisted PayPal request ID on retry.
 
 ## Upload storage policy
 

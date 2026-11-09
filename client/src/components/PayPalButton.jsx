@@ -90,6 +90,7 @@ const PayPalButton = ({ total, onPaymentError, cart, shippingMethod, shippingAdd
       </Alert>
     );
   if (!clientId) return <Spinner color="purple.500" alignSelf="center" />;
+  const cspNonce = document.querySelector('meta[name="csp-nonce"]')?.nonce;
 
   return (
     <Box
@@ -105,6 +106,7 @@ const PayPalButton = ({ total, onPaymentError, cart, shippingMethod, shippingAdd
           "client-id": clientId,
           currency: "HUF",
           components: "buttons",
+          ...(cspNonce ? { "data-csp-nonce": cspNonce } : {}),
         }}
       >
         <ButtonWrapper

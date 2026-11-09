@@ -54,13 +54,10 @@ const ProfileScreen = () => {
       validationSchema={Yup.object({
         name: Yup.string().required("A name is required."),
         email: Yup.string().email("Invalid email").required("An email address is required."),
-        password: Yup.string()
-          .min(1, "Password is to short - must contain at least 1 character.")
-          .required("Password is required"),
-        confirmPassword: Yup.string()
-          .min(1, "Password is to short - must contain at least 1 character.")
-          .required("Password is required")
-          .oneOf([Yup.ref("password"), null], "Passwords must match."),
+        password: Yup.string().test("password-length", "Password must be at least 6 characters.",
+          (value) => !value || (value.length >= 6 && Boolean(value.trim()))),
+        confirmPassword: Yup.string().oneOf([Yup.ref("password")], "Passwords must match.")
+          .when("password", { is: (value) => Boolean(value), then: (schema) => schema.required("Confirm your password.") }),
       })}
       onSubmit={(values) => {
         dispatch(updateProfile(userInfo._id, values.name, values.email, values.password));
@@ -106,8 +103,8 @@ const ProfileScreen = () => {
                       <PasswordTextField
                         type="password"
                         name="password"
-                        placeholder="your password"
-                        label="Password"
+                        placeholder="Leave blank to keep your current password"
+                        label="New password (optional)"
                       />
                       <PasswordTextField
                         type="password"

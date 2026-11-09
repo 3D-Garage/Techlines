@@ -436,3 +436,28 @@ test("admin JSON updates authenticate before parsing and conceal malformed reque
   assert.deepEqual(await response.json(), { message: "Érvénytelen JSON kérés." });
   assert.equal(h.records.get(id).adminNotes, "");
 });
+
+test("raw path-bearing multipart names are rejected before storage and valid Unicode names still work", async (t) => {
+  const h = await harness(t);
+  const boundary = "techlines-filename-regression";
+  const fields = Object.entries(contact).map(([name, value]) =>
+    `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`).join("");
+  for (const filename of ["../../escape.obj", String.raw`..\..\escape.obj`, String.raw`C:\temp\escape.obj`]) {
+    const body = fields + `--${boundary}\r\nContent-Disposition: form-data; name="modelFile"; filename="${filename}"\r\n`
+      + `Content-Type: text/plain\r\n\r\n${obj}\r\n--${boundary}--\r\n`;
+    const result = await h.request("", {
+      method: "POST", headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` }, body,
+    });
+    assert.equal(result.status, 400, filename);
+    assert.ok((await result.json()).errors.modelFile);
+    assert.equal(h.records.size, 0);
+    assert.deepEqual(await readdir(h.directory), []);
+    assert.equal(h.notifications.length, 0);
+  }
+
+  const accepted = await h.upload("modell-árvíztűrő.obj", obj);
+  assert.equal(accepted.status, 201);
+  const order = h.records.get((await accepted.json())._id);
+  assert.equal(order.modelFile.originalName, "modell-árvíztűrő.obj");
+  assert.match(order.modelFile.filename, /^[0-9a-f-]{36}\.obj$/);
+});
