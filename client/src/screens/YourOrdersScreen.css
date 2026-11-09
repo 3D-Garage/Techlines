@@ -1,0 +1,57 @@
+@media print {
+  #root:has(> main > .your-orders-print) > :not(main) {
+    display: none;
+  }
+
+  main > .your-orders-print {
+    min-height: 0;
+    max-width: none;
+    padding: 0;
+  }
+
+  .your-orders-print .your-orders-table {
+    overflow: visible;
+    white-space: normal;
+    border: 0;
+  }
+
+  .your-orders-table table {
+    width: 100%;
+    table-layout: fixed;
+  }
+
+  .your-orders-table tr {
+    break-inside: avoid;
+  }
+
+  .your-orders-table table th,
+  .your-orders-table table td {
+    padding: 6pt 4pt;
+    font-size: 9pt;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .your-orders-table th:nth-child(3),
+  .your-orders-table th:nth-child(5) {
+    width: 24%;
+  }
+
+  .your-orders-table .your-orders-shipping > * {
+    min-width: 0;
+  }
+
+  .your-orders-table .your-orders-delivery {
+    display: inline;
+    padding: 0;
+    background: none;
+    color: inherit;
+    font-size: inherit;
+    text-transform: none;
+    white-space: normal;
+  }
+
+  .your-orders-table .your-orders-print-action {
+    display: none;
+  }
+}
