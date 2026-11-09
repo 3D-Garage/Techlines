@@ -30,8 +30,8 @@ test("shares concurrent requests, caches for one hour and rejects expired data a
   assert.equal((await directory.getLockers()).length, 1);
   assert.equal(calls, 4);
 });
-test("malformed or unsuccessful list responses fail without caching", async () => {
-  for (const response of [{ ok: false }, { ok: true, json: async () => ({ points: [] }) }, { ok: true, json: async () => [] }]) {
+test("malformed, unsuccessful or entirely ineligible list responses fail without caching", async () => {
+  for (const response of [{ ok: false }, { ok: true, json: async () => ({ points: [] }) }, { ok: true, json: async () => [] }, { ok: true, json: async () => [{ ...point, variant: "Packeta Z-Pont" }] }]) {
     await assert.rejects(createFoxpostDirectory({ fetchList: async () => response }).getLockers(), { statusCode: 503 });
   }
 });

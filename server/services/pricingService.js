@@ -10,11 +10,11 @@ const SHIPPING_FEE_BY_METHOD = {
 
 export async function calculateOrderPricing({ items = [], shippingMethod }) {
   if (!Array.isArray(items) || items.length === 0) {
-    throw new Error("No items provided");
+    throw Object.assign(new Error("No items provided"), { statusCode: 400 });
   }
 
   if (!SUPPORTED_SHIPPING_METHODS.has(shippingMethod)) {
-    throw new Error("Unsupported shipping method");
+    throw Object.assign(new Error("Unsupported shipping method"), { statusCode: 400 });
   }
 
   const validatedItems = await validateInventory(items);

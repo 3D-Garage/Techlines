@@ -4,8 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const testsDirectory = fileURLToPath(new URL("../__tests__/", import.meta.url));
+const securityOnly = process.argv.includes("--security");
 const testFiles = readdirSync(testsDirectory)
   .filter((fileName) => fileName.endsWith(".test.js"))
+  .filter((fileName) => !securityOnly || /^(security|customOrder|authMiddleware|checkout|inventoryRace|paypal|foxpost)/.test(fileName))
   .sort()
   .map((fileName) => path.join(testsDirectory, fileName));
 
@@ -13,7 +15,8 @@ if (testFiles.length === 0) {
   console.error(`No test files were found in ${testsDirectory}`);
   process.exitCode = 1;
 } else {
-  const result = spawnSync(process.execPath, ["--test", ...testFiles], {
+  const coverage = process.argv.includes("--coverage");
+  const result = spawnSync(process.execPath, ["--test", ...(coverage ? ["--experimental-test-coverage"] : []), ...testFiles], {
     stdio: "inherit",
   });
 

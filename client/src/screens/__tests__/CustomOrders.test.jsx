@@ -155,6 +155,37 @@ test("renders untrusted text safely and saves status plus internal notes with au
   expect(await screen.findByText("Az állapot és a belső megjegyzés mentve.")).toBeInTheDocument();
 });
 
+const xssPayloads = [
+  "<img src=x onerror=alert(1)>",
+  "<script>alert(1)</script>",
+  "<svg onload=alert(1)></svg>",
+];
+const unsafeMarkup = "script, iframe, object, embed, img[src='x'], [onerror], [onload], a[href^='javascript:']";
+
+test.each(xssPayloads)("admin detail escapes stored XSS in customer fields, description, notes and filename: %s", async (payload) => {
+  axios.get.mockResolvedValue({ data: {
+    ...order,
+    customerName: payload, customerEmail: payload, customerPhone: payload,
+    description: payload, adminNotes: payload,
+    modelFile: { originalName: payload, extension: ".stl", size: 123, mimeType: "model/stl" },
+  } });
+  const { container } = renderAdmin();
+  await screen.findByText("Projekt leírása");
+  expect(screen.getAllByText(payload)).toHaveLength(6);
+  expect(screen.getByDisplayValue(payload)).toHaveAttribute("name", "adminNotes");
+  expect(container.querySelector(unsafeMarkup)).toBeNull();
+});
+
+test.each(xssPayloads)("admin list escapes stored XSS in customer fields: %s", async (payload) => {
+  axios.get.mockResolvedValue({ data: { orders: [{
+    ...order, customerName: payload, customerEmail: payload, customerPhone: payload,
+  }], total: 1, page: 1, pages: 1 } });
+  const { container } = renderAdmin(undefined, true);
+  await screen.findByRole("link", { name: "Részletek" });
+  expect(screen.getAllByText(payload)).toHaveLength(3);
+  expect(container.querySelector(unsafeMarkup)).toBeNull();
+});
+
 test("filters the admin table with authenticated requests", async () => {
   axios.get.mockResolvedValue({ data: { orders: [order], total: 1, page: 1, pages: 1 } });
   renderAdmin(undefined, true);

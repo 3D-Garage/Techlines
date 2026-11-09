@@ -9,9 +9,9 @@ import { createCustomOrderUpload, removeCustomOrderFile } from "../middleware/cu
 import { CUSTOM_ORDER_STATUSES, validateCustomOrderInput, validateCustomOrderUpdate } from "../services/customOrderValidation.js";
 import { notifyCustomOrderAdmin } from "../services/customOrderNotification.js";
 import { getCustomOrderConfig } from "../config/customOrders.js";
+import { releaseCustomOrderStorage, storedModelFilename } from "../services/customOrderStorage.js";
 
 const supportedExtensions = [".stl", ".obj", ".step", ".stp"];
-const storedFilenamePattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(stl|obj|step|stp)$/;
 
 const requestError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -77,6 +77,7 @@ export function createCustomOrderRouter({
         size: req.file.size,
         mimeType: req.file.mimetype || "application/octet-stream",
         extension: req.file.extension || path.extname(req.file.filename).toLowerCase(),
+        expiresAt: req.file.expiresAt,
       } : undefined;
       order = await OrderModel.create({
         ...data,
@@ -92,6 +93,9 @@ export function createCustomOrderRouter({
       });
       throw error;
     }
+    // The persisted file now counts by its actual size, rather than its reserved
+    // maximum. A failed release stays reserved and cannot overbook storage.
+    await releaseCustomOrderStorage(req.file).catch(() => console.error("Custom order quota release failed."));
 
     const notification = { status: "pending", attemptedAt: new Date() };
     try {
@@ -146,11 +150,16 @@ export function createCustomOrderRouter({
   router.get("/:id/file", asyncHandler(async (req, res, next) => {
     const order = await findOrder(req.params.id);
     const file = order.modelFile;
-    if (!file || !storedFilenamePattern.test(file.filename)) {
+    if (!file || !storedModelFilename.test(file.filename)) {
       throw requestError(404, "A modellfájl nem található.");
     }
-    const { uploadDir } = getCustomOrderConfig();
+    const { uploadDir, retentionMs } = getCustomOrderConfig();
     const filename = path.resolve(uploadDir, file.filename);
+    const expiresAt = file.expiresAt ? new Date(file.expiresAt).getTime() : new Date(order.createdAt).getTime() + retentionMs;
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      await removeCustomOrderFile({ path: filename });
+      throw requestError(404, "A modellfájl nem található.");
+    }
     try {
       const stats = await lstat(filename);
       const [resolvedDirectory, resolvedFile] = await Promise.all([realpath(uploadDir), realpath(filename)]);
@@ -191,11 +200,12 @@ export function createCustomOrderRouter({
     }
     const explicitStatus = Number(error.status || error.statusCode);
     const responseStatus = res.statusCode >= 400 && res.statusCode < 500 ? res.statusCode : 500;
-    const status = explicitStatus >= 400 && explicitStatus < 500 ? explicitStatus : responseStatus;
+    const controlledError = (explicitStatus >= 400 && explicitStatus < 500) || [503, 507].includes(explicitStatus);
+    const status = controlledError ? explicitStatus : responseStatus;
     const fallback = status === 401 ? "Bejelentkezés szükséges."
       : status === 403 ? "Adminisztrátori jogosultság szükséges."
         : "A kérés feldolgozása sikertelen. Kérjük, próbálja újra később.";
-    const message = explicitStatus >= 400 && explicitStatus < 500 ? error.message : fallback;
+    const message = controlledError ? error.message : fallback;
     const body = { message };
     if ([400, 413, 415].includes(status) && error.errors && typeof error.errors === "object") body.errors = error.errors;
     res.status(status).json(body);

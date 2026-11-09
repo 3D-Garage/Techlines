@@ -8,6 +8,7 @@ const modelFileSchema = new mongoose.Schema(
     size: { type: Number, required: true, min: 1 },
     mimeType: { type: String, required: true, maxlength: 120 },
     extension: { type: String, required: true, enum: [".stl", ".obj", ".step", ".stp"] },
+    expiresAt: Date,
   },
   { _id: false },
 );

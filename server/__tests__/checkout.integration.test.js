@@ -439,10 +439,26 @@ test("invalid FOXPOST phone and unknown or ineligible points reject creation bef
     assert.equal(result.status, 400); assert.equal(result.data.creationRejected, true);
   }
   for (const extra of [{ load: "overloaded" }, { variant: "Packeta Z-Pont" }, { country: "SK" }, { closeDate: "2020-01-01" }, { service: ["dispatch"] }, { operator_id: "" }, { operator_id: "   " }]) {
-    __setFoxpostDirectory(foxpostDirectory([{ ...foxpostPoint, ...extra }]));
+    __setFoxpostDirectory(foxpostDirectory([
+      { ...foxpostPoint, ...extra },
+      { ...foxpostPoint, place_id: 999, operator_id: "hu999" },
+    ]));
     assert.equal((await api("/api/paypal/create-order", { body: input(foxpostInput({ requestId: `invalid-foxpost-${requestNumber++}` })) })).status, 400);
   }
   assert.equal(createCalls, 0); assert.equal(await CheckoutAttempt.countDocuments(), 0);
+});
+
+test("a directory with no eligible FOXPOST points rejects creation with 503 and no side effects", async () => {
+  for (const points of [[], [{ ...foxpostPoint, variant: "Packeta Z-Pont" }]]) {
+    __setFoxpostDirectory(foxpostDirectory(points));
+    assert.equal((await api("/api/shipping/foxpost/lockers", { user: null })).status, 503);
+    const result = await api("/api/paypal/create-order", { body: input(foxpostInput()) });
+    assert.equal(result.status, 503);
+    assert.equal(result.data.creationRejected, true);
+  }
+  assert.equal(createCalls, 0);
+  assert.equal(await CheckoutAttempt.countDocuments(), 0);
+  assert.equal((await Product.findById(product._id)).stock, 3);
 });
 
 test("directory endpoint filters points; outage rejects only new FOXPOST attempts while other methods and quotes work", async () => {
